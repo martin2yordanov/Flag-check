@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
+import { Show, SignIn, UserButton, useAuth, useUser } from '@clerk/react'
 import './App.css'
 
 const DEFAULT_GREEN = [
@@ -30,7 +31,9 @@ const DEFAULT_RED = [
   'Не знае какво иска',
 ]
 
-const STORAGE_KEY = 'flag-check-v3'
+const STORAGE_KEY_PREFIX = 'flag-check-v3'
+const LEGACY_STORAGE_KEY = 'flag-check-v3'
+const storageKey = (userId) => userId ? `${STORAGE_KEY_PREFIX}:${userId}` : STORAGE_KEY_PREFIX
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2,8)}`
 const today = () => new Date().toISOString().slice(0,10)
 
@@ -61,26 +64,41 @@ const normalizeItem = (i) => {
   }
 }
 
-function loadState() {
+function normalizeState(p) {
+  if (!p || !p.profiles?.length) return null
+  p.profiles.forEach(pr => {
+    pr.green = pr.green.map(normalizeItem)
+    pr.red = pr.red.map(normalizeItem)
+    pr.journal = pr.journal || []
+  })
+  p.streak = p.streak || { count: 0, lastDay: null }
+  p.apiKey = p.apiKey || ''
+  p.compareIds = p.compareIds || []
+  return p
+}
+
+function defaultState() {
+  const def = makeProfile('Default')
+  return { profiles: [def], activeId: def.id, streak: { count: 0, lastDay: null }, apiKey: '', compareIds: [] }
+}
+
+function loadLocal(userId) {
+  // Prefer user-namespaced key; fall back to legacy unscoped key once for migration.
   try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      const p = JSON.parse(saved)
-      if (p.profiles?.length) {
-        p.profiles.forEach(pr => {
-          pr.green = pr.green.map(normalizeItem)
-          pr.red = pr.red.map(normalizeItem)
-          pr.journal = pr.journal || []
-        })
-        p.streak = p.streak || { count: 0, lastDay: null }
-        p.apiKey = p.apiKey || ''
-        p.compareIds = p.compareIds || []
-        return p
+    const ns = localStorage.getItem(storageKey(userId))
+    if (ns) {
+      const p = normalizeState(JSON.parse(ns))
+      if (p) return p
+    }
+    if (userId) {
+      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY)
+      if (legacy) {
+        const p = normalizeState(JSON.parse(legacy))
+        if (p) return p
       }
     }
   } catch {}
-  const def = makeProfile('Default')
-  return { profiles: [def], activeId: def.id, streak: { count: 0, lastDay: null }, apiKey: '', compareIds: [] }
+  return defaultState()
 }
 
 function computeStats(profile) {
@@ -120,7 +138,34 @@ function verdictFor(compat, redPct, dbTriggered) {
 }
 
 export default function App() {
-  const [state, setState] = useState(loadState)
+  return (
+    <Fragment>
+      <Show when="signed-out">
+        <SignInScreen />
+      </Show>
+      <Show when="signed-in">
+        <FlagCheckApp />
+      </Show>
+    </Fragment>
+  )
+}
+
+function SignInScreen() {
+  return (
+    <div className="auth-screen">
+      <div className="auth-header">
+        <h1>Flag Check</h1>
+        <p>Влез или регистрирай се, за да синхронизираш профилите си между устройства.</p>
+      </div>
+      <SignIn routing="hash" signUpUrl="#/sign-up" />
+    </div>
+  )
+}
+
+function FlagCheckApp() {
+  const { userId, getToken, isLoaded: authLoaded } = useAuth()
+  const { user } = useUser()
+  const [state, setState] = useState(() => loadLocal(userId))
   const [tab, setTab] = useState('flags')
   const [expanded, setExpanded] = useState({})
   const [newGreen, setNewGreen] = useState('')
@@ -131,10 +176,60 @@ export default function App() {
   const [insight, setInsight] = useState({ loading: false, text: '', error: '' })
   const [journalText, setJournalText] = useState('')
   const [journalMood, setJournalMood] = useState('')
+  const [syncStatus, setSyncStatus] = useState('idle') // idle | loading | saving | error
+  const hydratedRef = useRef(false)
+  const saveTimerRef = useRef(null)
 
+  // Initial pull from server on auth ready.
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  }, [state])
+    if (!authLoaded || !userId) return
+    let cancelled = false
+    ;(async () => {
+      setSyncStatus('loading')
+      try {
+        const token = await getToken()
+        const res = await fetch('/api/data', { headers: { Authorization: `Bearer ${token}` } })
+        if (!res.ok) throw new Error(`GET /api/data ${res.status}`)
+        const body = await res.json()
+        if (cancelled) return
+        if (body.data && typeof body.data === 'object' && Array.isArray(body.data.profiles)) {
+          const norm = normalizeState(body.data) || defaultState()
+          setState(norm)
+        }
+        hydratedRef.current = true
+        setSyncStatus('idle')
+      } catch (e) {
+        console.warn('Initial sync failed; using local cache.', e)
+        hydratedRef.current = true
+        setSyncStatus('error')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [authLoaded, userId, getToken])
+
+  // Persist locally + debounced PUT to server.
+  useEffect(() => {
+    try { localStorage.setItem(storageKey(userId), JSON.stringify(state)) } catch {}
+    if (!hydratedRef.current || !userId) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(async () => {
+      setSyncStatus('saving')
+      try {
+        const token = await getToken()
+        const res = await fetch('/api/data', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ data: state }),
+        })
+        if (!res.ok) throw new Error(`PUT /api/data ${res.status}`)
+        setSyncStatus('idle')
+      } catch (e) {
+        console.warn('Sync save failed; local cache retained.', e)
+        setSyncStatus('error')
+      }
+    }, 800)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [state, userId, getToken])
 
   useEffect(() => {
     const t = today()
@@ -308,9 +403,11 @@ Output exactly this structure in Bulgarian:
       <header className="header">
         <h1>Flag Check</h1>
         <div className="header-actions">
+          <SyncBadge status={syncStatus} />
           <button className="btn-ghost" onClick={setApiKey} title="API ключ">🔑</button>
           <button className="btn-ghost" onClick={exportData} title="Експорт">↓</button>
           <button className="btn-ghost" onClick={snapshot} title="Запис">💾</button>
+          <UserButton afterSignOutUrl="/" />
         </div>
       </header>
 
@@ -711,4 +808,10 @@ function CompareView({ a, b }) {
       </div>
     </div>
   )
+}
+
+function SyncBadge({ status }) {
+  if (status === 'idle') return null
+  const labels = { loading: '⟳ Зареждам', saving: '⟳ Синхронизирам', error: '⚠ Offline' }
+  return <span className={`sync-badge sync-${status}`} title={status}>{labels[status]}</span>
 }
