@@ -13,6 +13,14 @@ import {
   DragOverlay,
 } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
+import {
+  KeyRound, FileDown, Save, Pencil, Plus, X, ChevronDown, ChevronRight,
+  GripVertical, Flag, Sparkles, Brain, Flame, BarChart3, Table as TableIcon,
+  BookOpen, GitCompare, Check, AlertTriangle, TrendingUp, TrendingDown,
+  Loader2, CloudOff, CloudCheck,
+} from 'lucide-react'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 import './App.css'
 
 const DEFAULT_GREEN = []
@@ -73,7 +81,7 @@ function normalizeState(p) {
 }
 
 function defaultState() {
-  const def = makeProfile('Default')
+  const def = makeProfile('Профил 1')
   return { profiles: [def], activeId: def.id, streak: { count: 0, lastDay: null }, apiKey: '', compareIds: [] }
 }
 
@@ -280,13 +288,17 @@ function FlagCheckApp() {
 
   const addProfile = () => { setModal({ type: 'newProfile' }); setModalInput('') }
   const setApiKey = () => { setModal({ type: 'apiKey' }); setModalInput(state.apiKey || '') }
+  const renameProfile = () => { setModal({ type: 'renameProfile' }); setModalInput(active?.name || '') }
   const confirmModal = () => {
     if (modal?.type === 'newProfile') {
-      const name = modalInput.trim() || 'Нов'
+      const name = modalInput.trim() || `Профил ${state.profiles.length + 1}`
       const p = makeProfile(name)
       setState(s => ({ ...s, profiles: [...s.profiles, p], activeId: p.id }))
     } else if (modal?.type === 'apiKey') {
       setState(s => ({ ...s, apiKey: modalInput.trim() }))
+    } else if (modal?.type === 'renameProfile') {
+      const name = modalInput.trim()
+      if (name) updateActive(p => ({ ...p, name }))
     }
     setModal(null)
   }
@@ -328,15 +340,53 @@ function FlagCheckApp() {
   }
   const deleteJournal = (id) => updateActive(p => ({ ...p, journal: p.journal.filter(j => j.id !== id) }))
 
-  const exportData = () => {
-    const data = JSON.stringify(state, null, 2)
-    const blob = new Blob([data], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `flag-check-${new Date().toISOString().slice(0,10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+  const [exporting, setExporting] = useState(false)
+  const exportData = async () => {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const node = document.getElementById('pdf-report')
+      if (!node) return
+      const canvas = await html2canvas(node, {
+        backgroundColor: '#0a0a0c',
+        scale: 2,
+        useCORS: true,
+        windowWidth: 800,
+      })
+      const imgData = canvas.toDataURL('image/png')
+      // A4 portrait: 210 x 297 mm. Fit image width, scale height.
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+      const pageW = pdf.internal.pageSize.getWidth()
+      const pageH = pdf.internal.pageSize.getHeight()
+      const margin = 8
+      const imgW = pageW - 2 * margin
+      const imgH = (canvas.height * imgW) / canvas.width
+      let position = margin
+      let remaining = imgH
+      // If image is taller than page, slice across pages.
+      if (imgH <= pageH - 2 * margin) {
+        pdf.addImage(imgData, 'PNG', margin, margin, imgW, imgH)
+      } else {
+        // Render full image, then offset y to break across pages.
+        let y = margin
+        let pageOffset = 0
+        while (remaining > 0) {
+          pdf.addImage(imgData, 'PNG', margin, y - pageOffset, imgW, imgH)
+          remaining -= (pageH - 2 * margin)
+          if (remaining > 0) {
+            pdf.addPage()
+            pageOffset += (pageH - 2 * margin)
+            y = margin
+          }
+        }
+      }
+      pdf.save(`flag-check-${active.name}-${new Date().toISOString().slice(0,10)}.pdf`)
+    } catch (e) {
+      console.error('PDF export failed', e)
+      alert('Грешка при експорт в PDF: ' + (e?.message || e))
+    } finally {
+      setExporting(false)
+    }
   }
 
   const runInsight = async () => {
@@ -402,9 +452,12 @@ Output exactly this structure in Bulgarian:
         <h1>Flag Check</h1>
         <div className="header-actions">
           <SyncBadge status={syncStatus} lastSavedAt={lastSavedAt} />
-          <button className="btn-ghost" onClick={setApiKey} title="API ключ">🔑</button>
-          <button className="btn-ghost" onClick={exportData} title="Експорт">↓</button>
-          <button className="btn-ghost" onClick={snapshot} title="Запис">💾</button>
+          <button className="btn-ghost" onClick={renameProfile} title="Преименувай профил" aria-label="Преименувай профил"><Pencil size={16} /></button>
+          <button className="btn-ghost" onClick={setApiKey} title="API ключ" aria-label="API ключ"><KeyRound size={16} /></button>
+          <button className="btn-ghost" onClick={exportData} disabled={exporting} title="Експорт в PDF" aria-label="Експорт в PDF">
+            {exporting ? <Loader2 size={16} className="spin" /> : <FileDown size={16} />}
+          </button>
+          <button className="btn-ghost" onClick={snapshot} title="Запис на текущ резултат" aria-label="Запис"><Save size={16} /></button>
           <UserButton afterSignOutUrl="/" />
         </div>
       </header>
@@ -453,13 +506,15 @@ Output exactly this structure in Bulgarian:
 
       <div className="tabs">
         {[
-          ['flags', 'Флагове'],
-          ['journal', 'Дневник'],
-          ['compare', 'Сравнение'],
-          ['insights', 'AI'],
-        ].map(([t, label]) => (
+          ['flags', 'Флагове', Flag],
+          ['table', 'Таблица', TableIcon],
+          ['journal', 'Дневник', BookOpen],
+          ['compare', 'Сравнение', GitCompare],
+          ['insights', 'AI', Brain],
+        ].map(([t, label, Icon]) => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
-            {label}
+            <Icon size={14} className="tab-icon" />
+            <span className="tab-label">{label}</span>
           </button>
         ))}
       </div>
@@ -502,10 +557,14 @@ Output exactly this structure in Bulgarian:
               )}
             </div>
             {(active.history?.length || 0) === 0
-              ? <div className="empty">Натисни 💾 за запис на текущия резултат</div>
+              ? <div className="empty">Натисни иконата за запис, за да фиксираш текущия резултат</div>
               : <HistoryChart history={active.history} />}
           </section>
         </Fragment>
+      )}
+
+      {tab === 'table' && (
+        <FlagsTable profile={active} onUpdate={updateItem} />
       )}
 
       {tab === 'journal' && (
@@ -574,8 +633,10 @@ Output exactly this structure in Bulgarian:
       )}
 
       <footer className="footer">
-        {active.green.length + active.red.length} флага · {state.profiles.length} {state.profiles.length === 1 ? 'профил' : 'профила'} · запазено локално
+        {active.green.length + active.red.length} флага · {state.profiles.length} {state.profiles.length === 1 ? 'профил' : 'профила'} · автозапазено
       </footer>
+
+      <PdfReport profile={active} stats={stats} verdict={verdict} />
 
       {modal && (
         <div className="modal-bg" onClick={() => setModal(null)}>
@@ -599,6 +660,20 @@ Output exactly this structure in Bulgarian:
                 </div>
                 <input
                   type="password" placeholder="sk-ant-…" value={modalInput}
+                  onChange={e => setModalInput(e.target.value)}
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') confirmModal() }}
+                />
+              </Fragment>
+            )}
+            {modal.type === 'renameProfile' && (
+              <Fragment>
+                <h3>Преименувай профил</h3>
+                <div className="modal-help">
+                  Името се вижда само от теб и се запазва между устройства.
+                </div>
+                <input
+                  type="text" placeholder="Ново име…" value={modalInput}
                   onChange={e => setModalInput(e.target.value)}
                   autoFocus
                   onKeyDown={e => { if (e.key === 'Enter') confirmModal() }}
@@ -682,7 +757,7 @@ function Column({ title, accent, which, items, expanded, setExpanded, onRate, on
         <DragOverlay dropAnimation={null}>
           {activeItem ? (
             <div className={`row drag-overlay drag-overlay-${accent}`}>
-              <span className="drag-handle" aria-hidden>⋮⋮</span>
+              <span className="drag-handle" aria-hidden><GripVertical size={14} /></span>
               <span className="row-text">{activeItem.text}</span>
             </div>
           ) : null}
@@ -742,19 +817,20 @@ function SortableRow({ item, accent, which, expanded, setExpanded, onRate, onRem
   return (
     <li ref={setRefs} style={style} className={`row-wrap ${isDB ? 'dealbreaker' : ''} ${isOverItem ? 'row-over' : ''}`}>
       <div className={`row ${item.rating > 0 ? 'rated' : ''}`}>
-        <button className="drag-handle" {...attributes} {...listeners} aria-label="Премести" title="Влачи за преместване">⋮⋮</button>
+        <button className="drag-handle" {...attributes} {...listeners} aria-label="Премести" title="Влачи за преместване"><GripVertical size={14} /></button>
         <div className="row-body">
           <div className="row-main">
             <span className="row-text">
               {item.text}
-              {isDB && <span className="db-badge" title="Пречка">🚩</span>}
+              {isDB && <span className="db-badge" title="Пречка"><Flag size={10} fill="var(--red)" stroke="none" /></span>}
             </span>
             <button
               className={`row-note-btn ${item.note ? 'has-note' : ''}`}
               onClick={() => setExpanded(e => ({ ...e, [key]: !e[key] }))}
               title="Бележки и опции"
-            >{isExp ? '▾' : '▸'}</button>
-            <button className="row-del" onClick={() => onRemove(item.id)} title="Изтрий">×</button>
+              aria-label="Бележки и опции"
+            >{isExp ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button>
+            <button className="row-del" onClick={() => onRemove(item.id)} title="Изтрий" aria-label="Изтрий"><X size={14} /></button>
           </div>
           <Rating accent={accent} value={item.rating} onChange={(n) => onRate(item.id, n)} />
         </div>
@@ -883,7 +959,7 @@ function CompareView({ a, b }) {
         <div className="compare-head">{`${b.name}\n${sb.compat}%`}</div>
       </div>
       <div className="compare-grid">
-        <div className="compare-section-head" style={{ color: 'var(--green)' }}>✓ Зелени флагове</div>
+        <div className="compare-section-head" style={{ color: 'var(--green)' }}>Зелени флагове</div>
         {greenLabels.flatMap(label => {
           const ai = lookup(a.green, label)
           const bi = lookup(b.green, label)
@@ -893,7 +969,7 @@ function CompareView({ a, b }) {
             <div key={`b-g-${label}`} className={`compare-cell ${bi?.rating > 0 ? 'yes' : 'no'}`}>{cell(bi)}</div>,
           ]
         })}
-        <div className="compare-section-head" style={{ color: 'var(--red)' }}>🚩 Червени флагове</div>
+        <div className="compare-section-head" style={{ color: 'var(--red)' }}>Червени флагове</div>
         {redLabels.flatMap(label => {
           const ai = lookup(a.red, label)
           const bi = lookup(b.red, label)
@@ -909,11 +985,210 @@ function CompareView({ a, b }) {
 }
 
 function SyncBadge({ status, lastSavedAt }) {
-  if (status === 'loading') return <span className="sync-badge sync-loading">⟳ Зареждам</span>
-  if (status === 'saving') return <span className="sync-badge sync-saving">⟳ Синхронизирам</span>
-  if (status === 'error') return <span className="sync-badge sync-error" title="Промените са в локалния кеш — ще се синхронизират когато се възстанови връзката.">⚠ Offline</span>
+  if (status === 'loading') return <span className="sync-badge sync-loading"><Loader2 size={12} className="spin" /> Зареждам</span>
+  if (status === 'saving') return <span className="sync-badge sync-saving"><Loader2 size={12} className="spin" /> Синхронизирам</span>
+  if (status === 'error') return <span className="sync-badge sync-error" title="Промените са в локалния кеш — ще се синхронизират когато се възстанови връзката."><CloudOff size={12} /> Офлайн</span>
   if (status === 'idle' && lastSavedAt) {
-    return <span className="sync-badge sync-saved" title={new Date(lastSavedAt).toLocaleString()}>✓ Автозапазено</span>
+    return <span className="sync-badge sync-saved" title={new Date(lastSavedAt).toLocaleString()}><CloudCheck size={12} /> Автозапазено</span>
   }
   return null
+}
+
+function FlagsTable({ profile, onUpdate }) {
+  const allFlags = useMemo(() => {
+    const list = []
+    profile.green.forEach(i => list.push({ ...i, color: 'green' }))
+    profile.red.forEach(i => list.push({ ...i, color: 'red' }))
+    // Sort: main first, then by rating desc, then green before red.
+    list.sort((a, b) => {
+      const pa = a.priority === 'main' ? 0 : 1
+      const pb = b.priority === 'main' ? 0 : 1
+      if (pa !== pb) return pa - pb
+      if (b.rating !== a.rating) return b.rating - a.rating
+      return a.color === 'green' ? -1 : 1
+    })
+    return list
+  }, [profile])
+
+  if (allFlags.length === 0) {
+    return (
+      <section className="card">
+        <div className="card-title">{profile.name} · Таблица на флаговете</div>
+        <div className="empty">Все още няма флагове. Добави в раздел Флагове.</div>
+      </section>
+    )
+  }
+
+  return (
+    <section className="card">
+      <div className="card-title">
+        <span>{profile.name} · Таблица на флаговете</span>
+        <span style={{ color: 'var(--muted)', fontSize: 11, textTransform: 'none', letterSpacing: 0 }}>
+          {allFlags.length} {allFlags.length === 1 ? 'флаг' : 'флага'}
+        </span>
+      </div>
+      <div className="flags-table-wrap">
+        <table className="flags-table">
+          <thead>
+            <tr>
+              <th>Флаг</th>
+              <th className="th-priority">Важност</th>
+              <th className="th-rating">Оценка</th>
+              <th>Бележки</th>
+            </tr>
+          </thead>
+          <tbody>
+            {allFlags.map(item => (
+              <tr key={`${item.color}-${item.id}`} className={`tr-${item.color}`}>
+                <td>
+                  <span className={`color-pill color-${item.color}`} title={item.color === 'green' ? 'Зелен флаг' : 'Червен флаг'}>
+                    <Flag size={11} fill={item.color === 'green' ? 'var(--green)' : 'var(--red)'} stroke="none" />
+                  </span>
+                  <span className="flag-name">{item.text}</span>
+                  {item.color === 'red' && item.dealbreaker && <span className="db-badge" title="Пречка"> 🚩</span>}
+                </td>
+                <td className="td-priority">
+                  <span className={`priority-tag priority-tag-${item.priority}`}>
+                    {item.priority === 'main' ? 'Основен' : 'Допълнителен'}
+                  </span>
+                </td>
+                <td className="td-rating">
+                  <span className={`rating-num rating-num-${item.color} ${item.rating > 0 ? 'set' : ''}`}>
+                    {item.rating > 0 ? `${item.rating}/5` : '—'}
+                  </span>
+                </td>
+                <td className="td-note">
+                  <input
+                    className="note-inline"
+                    type="text"
+                    placeholder="—"
+                    value={item.note || ''}
+                    onChange={e => onUpdate(item.color, item.id, { note: e.target.value })}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+function PdfReport({ profile, stats, verdict }) {
+  const flagRow = (item, color) => (
+    <tr key={`${color}-${item.id}`}>
+      <td style={{ padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>
+        <span style={{
+          display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+          background: color === 'green' ? '#30d158' : '#ff453a', marginRight: 6,
+        }} />
+        {item.text}{color === 'red' && item.dealbreaker ? ' 🚩' : ''}
+      </td>
+      <td style={{ padding: '6px 8px', borderBottom: '1px solid #2a2a2e', color: '#a0a0a8' }}>
+        {item.priority === 'main' ? 'Основен' : 'Допълнителен'}
+      </td>
+      <td style={{ padding: '6px 8px', borderBottom: '1px solid #2a2a2e', textAlign: 'center', fontWeight: 600 }}>
+        {item.rating > 0 ? `${item.rating}/5` : '—'}
+      </td>
+      <td style={{ padding: '6px 8px', borderBottom: '1px solid #2a2a2e', color: '#a0a0a8', fontSize: 11 }}>
+        {item.note || '—'}
+      </td>
+    </tr>
+  )
+  return (
+    <div
+      id="pdf-report"
+      style={{
+        position: 'fixed',
+        left: '-10000px',
+        top: 0,
+        width: 800,
+        padding: 32,
+        background: '#0a0a0c',
+        color: '#f0f0f2',
+        fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+        fontSize: 13,
+        lineHeight: 1.4,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16, paddingBottom: 12, borderBottom: '2px solid #2a2a2e' }}>
+        <div>
+          <div style={{ fontSize: 12, color: '#a0a0a8', letterSpacing: 1, textTransform: 'uppercase' }}>Flag Check · доклад</div>
+          <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4 }}>{profile.name}</div>
+        </div>
+        <div style={{ textAlign: 'right', fontSize: 11, color: '#a0a0a8' }}>
+          {new Date().toLocaleDateString('bg-BG', { year: 'numeric', month: 'long', day: 'numeric' })}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
+        <PdfMetric label="Съвместимост" value={`${stats.compat}%`} accent="#ffd60a" big />
+        <PdfMetric label="Зелено" value={`${stats.greenPct}%`} sub={`${stats.greenChecked}/${profile.green.length}`} accent="#30d158" />
+        <PdfMetric label="Червено" value={`${stats.redPct}%`} sub={`${stats.redChecked}/${profile.red.length}`} accent="#ff453a" />
+      </div>
+
+      <div style={{
+        padding: 12, background: '#161618', border: '1px solid #2a2a2e',
+        borderRadius: 8, marginBottom: 20, fontWeight: 600, textAlign: 'center',
+        color: verdict.cls === 'verdict-green' ? '#30d158' : verdict.cls === 'verdict-red' ? '#ff453a' : '#ffd60a',
+      }}>
+        {verdict.text}
+      </div>
+
+      {profile.green.length > 0 && (
+        <Fragment>
+          <h3 style={{ fontSize: 14, color: '#30d158', margin: '16px 0 8px' }}>Зелени флагове</h3>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ color: '#a0a0a8', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Флаг</th>
+                <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Важност</th>
+                <th style={{ textAlign: 'center', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Оценка</th>
+                <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Бележки</th>
+              </tr>
+            </thead>
+            <tbody>{profile.green.map(i => flagRow(i, 'green'))}</tbody>
+          </table>
+        </Fragment>
+      )}
+
+      {profile.red.length > 0 && (
+        <Fragment>
+          <h3 style={{ fontSize: 14, color: '#ff453a', margin: '16px 0 8px' }}>Червени флагове</h3>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ color: '#a0a0a8', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Флаг</th>
+                <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Важност</th>
+                <th style={{ textAlign: 'center', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Оценка</th>
+                <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Бележки</th>
+              </tr>
+            </thead>
+            <tbody>{profile.red.map(i => flagRow(i, 'red'))}</tbody>
+          </table>
+        </Fragment>
+      )}
+
+      <div style={{ marginTop: 24, paddingTop: 12, borderTop: '1px solid #2a2a2e', fontSize: 10, color: '#7a7a82' }}>
+        Поверително · поколение от Flag Check · оценките са 1-5 по интензитет, важността е Основен (×3) или Допълнителен (×1)
+      </div>
+    </div>
+  )
+}
+
+function PdfMetric({ label, value, sub, accent, big }) {
+  return (
+    <div style={{
+      flex: big ? 1.4 : 1,
+      padding: 14,
+      background: '#161618',
+      border: '1px solid #2a2a2e',
+      borderRadius: 10,
+    }}>
+      <div style={{ fontSize: 10, color: '#a0a0a8', letterSpacing: 0.6, textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: big ? 32 : 24, fontWeight: 700, color: accent, marginTop: 4 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: '#7a7a82', marginTop: 2 }}>{sub}</div>}
+    </div>
+  )
 }
