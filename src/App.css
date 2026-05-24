@@ -474,4 +474,7 @@
 }
 .sync-badge.sync-loading,
 .sync-badge.sync-saving { color: var(--blue); }
+.sync-badge.sync-saved { color: var(--green); }
 .sync-badge.sync-error { color: var(--red); background: rgba(255,69,58,0.1); }
+
+.col-empty { padding: 20px 8px; font-size: 13px; }

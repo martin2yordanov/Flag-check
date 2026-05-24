@@ -2,34 +2,8 @@ import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { Show, SignIn, UserButton, useAuth, useUser } from '@clerk/react'
 import './App.css'
 
-const DEFAULT_GREEN = [
-  'Емоционална интелигентност',
-  'Дали се напряга, да е chill, над нещата',
-  'Да е палава в леглото',
-  'Колко близка е с майка си',
-  'Има ли приятелки',
-  'Умее ли да се извинява и признава грешките',
-  'Да не изневерява и как се държи с други мъже',
-  'Умее ли да прощава / да не е злопаметна',
-  'Говори ли за проблемите на момента',
-  'Имаме ли общи интереси',
-  'Има ли чувство за хумор',
-  'Искрена ли е с мен',
-  'Позитивна ли е, yes man',
-  'Да не е ревнива',
-  'Да не е обсебваща/да може да прекарва време със себе си',
-]
-const DEFAULT_RED = [
-  'Прекалено емоционална',
-  'Незряла',
-  'Не готви',
-  'Не е сексуална / физическа',
-  'Не е млада',
-  'Лекодостъпна',
-  'Лъже',
-  'Заядлива',
-  'Не знае какво иска',
-]
+const DEFAULT_GREEN = []
+const DEFAULT_RED = []
 
 const STORAGE_KEY_PREFIX = 'flag-check-v3'
 const LEGACY_STORAGE_KEY = 'flag-check-v3'
@@ -177,6 +151,7 @@ function FlagCheckApp() {
   const [journalText, setJournalText] = useState('')
   const [journalMood, setJournalMood] = useState('')
   const [syncStatus, setSyncStatus] = useState('idle') // idle | loading | saving | error
+  const [lastSavedAt, setLastSavedAt] = useState(null)
   const hydratedRef = useRef(false)
   const saveTimerRef = useRef(null)
 
@@ -198,6 +173,7 @@ function FlagCheckApp() {
         }
         hydratedRef.current = true
         setSyncStatus('idle')
+        setLastSavedAt(Date.now())
       } catch (e) {
         console.warn('Initial sync failed; using local cache.', e)
         hydratedRef.current = true
@@ -223,6 +199,7 @@ function FlagCheckApp() {
         })
         if (!res.ok) throw new Error(`PUT /api/data ${res.status}`)
         setSyncStatus('idle')
+        setLastSavedAt(Date.now())
       } catch (e) {
         console.warn('Sync save failed; local cache retained.', e)
         setSyncStatus('error')
@@ -403,7 +380,7 @@ Output exactly this structure in Bulgarian:
       <header className="header">
         <h1>Flag Check</h1>
         <div className="header-actions">
-          <SyncBadge status={syncStatus} />
+          <SyncBadge status={syncStatus} lastSavedAt={lastSavedAt} />
           <button className="btn-ghost" onClick={setApiKey} title="API ключ">🔑</button>
           <button className="btn-ghost" onClick={exportData} title="Експорт">↓</button>
           <button className="btn-ghost" onClick={snapshot} title="Запис">💾</button>
@@ -626,6 +603,9 @@ function Column({ title, accent, which, items, expanded, setExpanded, onRate, on
         {title}
         <span className="count">{items.filter(i => i.rating > 0).length}/{items.length}</span>
       </h2>
+      {items.length === 0 && (
+        <div className="empty col-empty">Все още няма флагове. Добави първия отдолу ↓</div>
+      )}
       <ul className="list">
         {items.map(item => {
           const key = `${which}-${item.id}`
@@ -810,8 +790,12 @@ function CompareView({ a, b }) {
   )
 }
 
-function SyncBadge({ status }) {
-  if (status === 'idle') return null
-  const labels = { loading: '⟳ Зареждам', saving: '⟳ Синхронизирам', error: '⚠ Offline' }
-  return <span className={`sync-badge sync-${status}`} title={status}>{labels[status]}</span>
+function SyncBadge({ status, lastSavedAt }) {
+  if (status === 'loading') return <span className="sync-badge sync-loading">⟳ Зареждам</span>
+  if (status === 'saving') return <span className="sync-badge sync-saving">⟳ Синхронизирам</span>
+  if (status === 'error') return <span className="sync-badge sync-error" title="Промените са в локалния кеш — ще се синхронизират когато се възстанови връзката.">⚠ Offline</span>
+  if (status === 'idle' && lastSavedAt) {
+    return <span className="sync-badge sync-saved" title={new Date(lastSavedAt).toLocaleString()}>✓ Автозапазено</span>
+  }
+  return null
 }
