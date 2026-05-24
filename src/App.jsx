@@ -1,5 +1,18 @@
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { Show, SignIn, UserButton, useAuth, useUser } from '@clerk/react'
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  DragOverlay,
+} from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
 import './App.css'
 
 const DEFAULT_GREEN = []
@@ -11,8 +24,11 @@ const storageKey = (userId) => userId ? `${STORAGE_KEY_PREFIX}:${userId}` : STOR
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2,8)}`
 const today = () => new Date().toISOString().slice(0,10)
 
+const PRIORITY_WEIGHTS = { main: 3, secondary: 1 }
+const priorityWeight = (p) => PRIORITY_WEIGHTS[p] ?? PRIORITY_WEIGHTS.main
+
 const makeItems = (texts) => texts.map(text => ({
-  id: uid(), text, rating: 0, weight: 3, note: '', ratedAt: null, dealbreaker: false,
+  id: uid(), text, rating: 0, priority: 'main', note: '', ratedAt: null, dealbreaker: false,
 }))
 
 const makeProfile = (name) => ({
@@ -28,13 +44,18 @@ const normalizeItem = (i) => {
     ? i.rating
     : (i.checked ? 3 : 0)
   const ratedAt = i.ratedAt ?? i.checkedAt ?? null
+  // Migrate legacy weight (1-5) -> priority. weight >= 3 was meaningful → main.
+  let priority = i.priority
+  if (priority !== 'main' && priority !== 'secondary') {
+    priority = (typeof i.weight === 'number' && i.weight < 3) ? 'secondary' : 'main'
+  }
   return {
     note: '',
     dealbreaker: false,
-    weight: 3,
     ...i,
     rating,
     ratedAt,
+    priority,
   }
 }
 
@@ -77,10 +98,10 @@ function loadLocal(userId) {
 
 function computeStats(profile) {
   const g = profile.green, r = profile.red
-  const gMax = g.reduce((s,i)=>s + 5 * i.weight, 0) || 1
-  const gScore = g.reduce((s,i)=>s + i.rating * i.weight, 0)
-  const rMax = r.reduce((s,i)=>s + 5 * i.weight, 0) || 1
-  const rScore = r.reduce((s,i)=>s + i.rating * i.weight, 0)
+  const gMax = g.reduce((s,i)=>s + 5 * priorityWeight(i.priority), 0) || 1
+  const gScore = g.reduce((s,i)=>s + i.rating * priorityWeight(i.priority), 0)
+  const rMax = r.reduce((s,i)=>s + 5 * priorityWeight(i.priority), 0) || 1
+  const rScore = r.reduce((s,i)=>s + i.rating * priorityWeight(i.priority), 0)
   const greenPct = Math.round((gScore / gMax) * 100)
   const redPct = Math.round((rScore / rMax) * 100)
   const compat = Math.max(0, Math.min(100, Math.round(greenPct - redPct)))
@@ -252,7 +273,7 @@ function FlagCheckApp() {
     const v = text.trim(); if (!v) return
     updateActive(p => ({
       ...p,
-      [which]: [...p[which], { id: uid(), text: v, rating: 0, weight: 3, note: '', ratedAt: null, dealbreaker: false }],
+      [which]: [...p[which], { id: uid(), text: v, rating: 0, priority: 'main', note: '', ratedAt: null, dealbreaker: false }],
     }))
     setText('')
   }
@@ -321,9 +342,9 @@ function FlagCheckApp() {
   const runInsight = async () => {
     if (!state.apiKey) { setApiKey(); return }
     setInsight({ loading: true, text: '', error: '' })
-    const greenRated = active.green.filter(i => i.rating > 0).map(i => `${i.text} (rating ${i.rating}/5, weight ${i.weight})${i.note ? ' — ' + i.note : ''}`)
-    const greenUnrated = active.green.filter(i => i.rating === 0).map(i => `${i.text} (weight ${i.weight})`)
-    const redRated = active.red.filter(i => i.rating > 0).map(i => `${i.text} (rating ${i.rating}/5, weight ${i.weight})${i.note ? ' — ' + i.note : ''}${i.dealbreaker ? ' [DEALBREAKER]' : ''}`)
+    const greenRated = active.green.filter(i => i.rating > 0).map(i => `${i.text} (rating ${i.rating}/5, ${i.priority})${i.note ? ' — ' + i.note : ''}`)
+    const greenUnrated = active.green.filter(i => i.rating === 0).map(i => `${i.text} (${i.priority})`)
+    const redRated = active.red.filter(i => i.rating > 0).map(i => `${i.text} (rating ${i.rating}/5, ${i.priority})${i.note ? ' — ' + i.note : ''}${i.dealbreaker ? ' [DEALBREAKER]' : ''}`)
     const redUnrated = active.red.filter(i => i.rating === 0).map(i => i.text)
     const journal = (active.journal || []).slice(0, 5).map(j => `[${new Date(j.t).toLocaleDateString()}${j.mood ? ' ' + j.mood : ''}] ${j.text}`)
 
@@ -331,7 +352,7 @@ function FlagCheckApp() {
 
 Subject: ${active.name}
 Compatibility: ${stats.compat}% (green ${stats.greenPct}%, red ${stats.redPct}%)
-Each flag is rated 1-5 (intensity) and weighted 1-5 (importance).
+Each flag is rated 1-5 (intensity) and tagged main (3× weight) or secondary (1× weight).
 
 Rated green flags: ${greenRated.join('; ') || 'none'}
 Unrated green flags: ${greenUnrated.join('; ') || 'none'}
@@ -596,6 +617,35 @@ Output exactly this structure in Bulgarian:
 }
 
 function Column({ title, accent, which, items, expanded, setExpanded, onRate, onRemove, onUpdate, newValue, setNewValue, onAdd }) {
+  const [activeId, setActiveId] = useState(null)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }),
+    useSensor(KeyboardSensor),
+  )
+
+  const main = items.filter(i => i.priority === 'main')
+  const secondary = items.filter(i => i.priority === 'secondary')
+  const activeItem = activeId ? items.find(i => i.id === activeId) : null
+
+  const handleDragEnd = (event) => {
+    setActiveId(null)
+    const { active, over } = event
+    if (!over) return
+    const overId = String(over.id)
+    let targetPriority = null
+    if (overId.startsWith('zone:')) {
+      targetPriority = overId.slice(5) // "main" | "secondary"
+    } else {
+      const overItem = items.find(i => i.id === overId)
+      if (overItem) targetPriority = overItem.priority
+    }
+    if (!targetPriority) return
+    const dragged = items.find(i => i.id === active.id)
+    if (!dragged || dragged.priority === targetPriority) return
+    onUpdate(active.id, { priority: targetPriority })
+  }
+
   return (
     <section className={`col col-${accent}`}>
       <h2 className="col-title">
@@ -606,60 +656,38 @@ function Column({ title, accent, which, items, expanded, setExpanded, onRate, on
       {items.length === 0 && (
         <div className="empty col-empty">Все още няма флагове. Добави първия отдолу ↓</div>
       )}
-      <ul className="list">
-        {items.map(item => {
-          const key = `${which}-${item.id}`
-          const isExp = expanded[key]
-          const isDB = accent === 'red' && item.dealbreaker
-          return (
-            <li key={item.id} className={`row-wrap ${isDB ? 'dealbreaker' : ''}`}>
-              <div className={`row ${item.rating > 0 ? 'rated' : ''}`}>
-                <Rating accent={accent} value={item.rating} onChange={(n) => onRate(item.id, n)} />
-                <span className="row-text">
-                  {item.text}
-                  {isDB && <span className="db-badge" title="Пречка">🚩</span>}
-                </span>
-                <span className="row-weight" title="Тежест">×{item.weight}</span>
-                <button
-                  className={`row-note-btn ${item.note ? 'has-note' : ''}`}
-                  onClick={() => setExpanded(e => ({ ...e, [key]: !e[key] }))}
-                >{isExp ? '▾' : '▸'}</button>
-                <button className="row-del" onClick={() => onRemove(item.id)}>×</button>
-              </div>
-              {isExp && (
-                <div className="row-detail">
-                  <div className="weight-row">
-                    Тежест:
-                    {[1,2,3,4,5].map(w => (
-                      <button
-                        key={w}
-                        className={`weight-pill ${item.weight === w ? 'sel' : ''}`}
-                        onClick={() => onUpdate(item.id, { weight: w })}
-                      >{w}</button>
-                    ))}
-                    {accent === 'red' && (
-                      <button
-                        className={`db-toggle ${item.dealbreaker ? 'on' : ''}`}
-                        onClick={() => onUpdate(item.id, { dealbreaker: !item.dealbreaker })}
-                      >{item.dealbreaker ? '🚩 Пречка' : 'Маркирай като пречка'}</button>
-                    )}
-                  </div>
-                  <textarea
-                    placeholder="Бележки / контекст…"
-                    value={item.note || ''}
-                    onChange={e => onUpdate(item.id, { note: e.target.value })}
-                  />
-                  {item.ratedAt && (
-                    <div className="row-meta">
-                      Оценено: {new Date(item.ratedAt).toLocaleString()}
-                    </div>
-                  )}
-                </div>
-              )}
-            </li>
-          )
-        })}
-      </ul>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragStart={(e) => setActiveId(String(e.active.id))}
+        onDragEnd={handleDragEnd}
+        onDragCancel={() => setActiveId(null)}
+      >
+        {items.length > 0 && (
+          <Fragment>
+            <PrioritySection
+              accent={accent} which={which} priority="main" label="Основни"
+              items={main} expanded={expanded} setExpanded={setExpanded}
+              onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
+              activeId={activeId}
+            />
+            <PrioritySection
+              accent={accent} which={which} priority="secondary" label="Допълнителни"
+              items={secondary} expanded={expanded} setExpanded={setExpanded}
+              onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
+              activeId={activeId}
+            />
+          </Fragment>
+        )}
+        <DragOverlay dropAnimation={null}>
+          {activeItem ? (
+            <div className={`row drag-overlay drag-overlay-${accent}`}>
+              <span className="drag-handle" aria-hidden>⋮⋮</span>
+              <span className="row-text">{activeItem.text}</span>
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
       <div className="add-row">
         <input
           type="text" placeholder="Добави нов флаг…" value={newValue}
@@ -672,18 +700,108 @@ function Column({ title, accent, which, items, expanded, setExpanded, onRate, on
   )
 }
 
+function PrioritySection({ accent, which, priority, label, items, expanded, setExpanded, onRate, onRemove, onUpdate, activeId }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `zone:${priority}` })
+  return (
+    <div className={`priority-section ${isOver ? 'priority-over' : ''}`}>
+      <div className={`priority-head priority-${priority}`}>
+        <span className="priority-label">{label}</span>
+        <span className="priority-weight">{priority === 'main' ? '×3' : '×1'}</span>
+        <span className="priority-count">{items.length}</span>
+      </div>
+      <ul ref={setNodeRef} className={`list priority-list ${items.length === 0 ? 'priority-list-empty' : ''}`}>
+        {items.length === 0 ? (
+          <li className="priority-empty">Пусни флаг тук</li>
+        ) : (
+          items.map(item => (
+            <SortableRow
+              key={item.id} item={item} accent={accent} which={which}
+              expanded={expanded} setExpanded={setExpanded}
+              onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
+              isDragging={activeId === item.id}
+            />
+          ))
+        )}
+      </ul>
+    </div>
+  )
+}
+
+function SortableRow({ item, accent, which, expanded, setExpanded, onRate, onRemove, onUpdate, isDragging }) {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: item.id })
+  // Item is also a droppable target so cross-section drops can use its position as a hint.
+  const { setNodeRef: setDropRef, isOver: isOverItem } = useDroppable({ id: item.id })
+  const setRefs = (node) => { setNodeRef(node); setDropRef(node) }
+  const key = `${which}-${item.id}`
+  const isExp = expanded[key]
+  const isDB = accent === 'red' && item.dealbreaker
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.35 : 1,
+  }
+  return (
+    <li ref={setRefs} style={style} className={`row-wrap ${isDB ? 'dealbreaker' : ''} ${isOverItem ? 'row-over' : ''}`}>
+      <div className={`row ${item.rating > 0 ? 'rated' : ''}`}>
+        <button className="drag-handle" {...attributes} {...listeners} aria-label="Премести" title="Влачи за преместване">⋮⋮</button>
+        <div className="row-body">
+          <div className="row-main">
+            <span className="row-text">
+              {item.text}
+              {isDB && <span className="db-badge" title="Пречка">🚩</span>}
+            </span>
+            <button
+              className={`row-note-btn ${item.note ? 'has-note' : ''}`}
+              onClick={() => setExpanded(e => ({ ...e, [key]: !e[key] }))}
+              title="Бележки и опции"
+            >{isExp ? '▾' : '▸'}</button>
+            <button className="row-del" onClick={() => onRemove(item.id)} title="Изтрий">×</button>
+          </div>
+          <Rating accent={accent} value={item.rating} onChange={(n) => onRate(item.id, n)} />
+        </div>
+      </div>
+      {isExp && (
+        <div className="row-detail">
+          {accent === 'red' && (
+            <button
+              className={`db-toggle ${item.dealbreaker ? 'on' : ''}`}
+              onClick={() => onUpdate(item.id, { dealbreaker: !item.dealbreaker })}
+            >{item.dealbreaker ? '🚩 Пречка' : 'Маркирай като пречка'}</button>
+          )}
+          <textarea
+            placeholder="Бележки / контекст…"
+            value={item.note || ''}
+            onChange={e => onUpdate(item.id, { note: e.target.value })}
+          />
+          {item.ratedAt && (
+            <div className="row-meta">
+              Оценено: {new Date(item.ratedAt).toLocaleString()}
+            </div>
+          )}
+        </div>
+      )}
+    </li>
+  )
+}
+
 function Rating({ accent, value, onChange }) {
+  const labels = ['', 'Слабо', 'Средно', 'Силно', 'Много силно', 'Изключително']
   return (
     <div className={`rating rating-${accent}`} role="radiogroup" aria-label="Оценка 1-5">
-      {[1,2,3,4,5].map(n => (
-        <button
-          key={n}
-          className={`rating-dot ${n <= value ? 'on' : ''}`}
-          onClick={() => onChange(n)}
-          aria-label={`${n}`}
-          title={`${n}/5`}
-        >{n}</button>
-      ))}
+      <div className="rating-segs">
+        {[1,2,3,4,5].map(n => (
+          <button
+            key={n}
+            type="button"
+            className={`rating-seg ${n <= value ? 'on' : ''}`}
+            onClick={() => onChange(n)}
+            aria-label={`${n}/5 — ${labels[n]}`}
+            title={`${n}/5 · ${labels[n]}`}
+          >
+            <span className="rating-seg-fill" />
+          </button>
+        ))}
+      </div>
+      <span className="rating-readout">{value > 0 ? `${value}/5` : '—'}</span>
     </div>
   )
 }
