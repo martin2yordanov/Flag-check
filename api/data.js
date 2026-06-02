@@ -49,6 +49,29 @@ export default async function handler(req, res) {
         res.status(400).json({ error: 'body.data must be an object' })
         return
       }
+
+      // Optimistic concurrency: the client sends the updated_at it last saw.
+      // `force` skips the check (explicit user "overwrite anyway"). When neither
+      // is provided we keep the legacy last-write-wins behaviour.
+      const baseUpdatedAt = body?.baseUpdatedAt ?? null
+      const force = body?.force === true
+      if (!force && baseUpdatedAt !== null) {
+        const existing = await sql`SELECT updated_at FROM user_data WHERE user_id = ${userId}`
+        const serverUpdatedAt = existing[0]?.updated_at ?? null
+        const same = serverUpdatedAt === null
+          ? false // row appeared since the client thought it had a base — treat as conflict
+          : new Date(serverUpdatedAt).getTime() === new Date(baseUpdatedAt).getTime()
+        if (serverUpdatedAt !== null && !same) {
+          const rows = await sql`SELECT data, updated_at FROM user_data WHERE user_id = ${userId}`
+          res.status(409).json({
+            error: 'conflict',
+            data: rows[0]?.data ?? null,
+            updated_at: rows[0]?.updated_at ?? null,
+          })
+          return
+        }
+      }
+
       const rows = await sql`
         INSERT INTO user_data (user_id, data, updated_at)
         VALUES (${userId}, ${data}, NOW())

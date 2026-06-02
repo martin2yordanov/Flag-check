@@ -17,10 +17,8 @@ import {
   KeyRound, FileDown, Save, Pencil, Plus, X, ChevronDown, ChevronRight,
   GripVertical, Flag, Sparkles, Brain, Flame, BarChart3, Table as TableIcon,
   BookOpen, GitCompare, Check, AlertTriangle, TrendingUp, TrendingDown,
-  Loader2, CloudOff, CloudCheck,
+  Loader2, CloudOff, CloudCheck, Download, Upload, Trash2,
 } from 'lucide-react'
-import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
 import './App.css'
 
 const DEFAULT_GREEN = []
@@ -118,8 +116,19 @@ function computeStats(profile) {
     greenChecked: g.filter(i=>i.rating > 0).length,
     redChecked: r.filter(i=>i.rating > 0).length,
     greenPct, redPct, compat, triggeredDealbreakers,
+    // Weighted-point breakdown so the compatibility number is transparent.
+    gScore, gMax, rScore, rMax,
   }
 }
+
+// Verdict thresholds, surfaced in the UI legend so the bands aren't magic numbers.
+const RED_ALERT_PCT = 40
+const VERDICT_BANDS = [
+  { min: 70, text: '✨ Силен мач — продължи', cls: 'verdict-green' },
+  { min: 50, text: '👀 Обещаващо — наблюдавай', cls: 'verdict-yellow' },
+  { min: 30, text: '⚠️ Смесени сигнали — внимавай', cls: 'verdict-yellow' },
+  { min: 0,  text: '❌ Ниска съвместимост', cls: 'verdict-red' },
+]
 
 function trendFor(profile) {
   const h = profile.history || []
@@ -132,11 +141,8 @@ function trendFor(profile) {
 }
 
 function verdictFor(compat, redPct) {
-  if (redPct >= 40) return { text: '🚩 Прекалено много червени флагове — бягай', cls: 'verdict-red' }
-  if (compat >= 70) return { text: '✨ Силен мач — продължи', cls: 'verdict-green' }
-  if (compat >= 50) return { text: '👀 Обещаващо — наблюдавай', cls: 'verdict-yellow' }
-  if (compat >= 30) return { text: '⚠️ Смесени сигнали — внимавай', cls: 'verdict-yellow' }
-  return { text: '❌ Ниска съвместимост', cls: 'verdict-red' }
+  if (redPct >= RED_ALERT_PCT) return { text: '🚩 Прекалено много червени флагове — бягай', cls: 'verdict-red' }
+  return VERDICT_BANDS.find(b => compat >= b.min) || VERDICT_BANDS[VERDICT_BANDS.length - 1]
 }
 
 export default function App() {
@@ -178,10 +184,12 @@ function FlagCheckApp() {
   const [insight, setInsight] = useState({ loading: false, text: '', error: '' })
   const [journalText, setJournalText] = useState('')
   const [journalMood, setJournalMood] = useState('')
-  const [syncStatus, setSyncStatus] = useState('idle') // idle | loading | saving | error
+  const [syncStatus, setSyncStatus] = useState('idle') // idle | loading | saving | error | conflict
   const [lastSavedAt, setLastSavedAt] = useState(null)
+  const [conflict, setConflict] = useState(null) // { data, updated_at } from server when a remote edit clobbered ours
   const hydratedRef = useRef(false)
   const saveTimerRef = useRef(null)
+  const serverUpdatedAtRef = useRef(null) // last updated_at we've successfully synced with the server
 
   // Initial pull from server on auth ready.
   useEffect(() => {
@@ -199,6 +207,7 @@ function FlagCheckApp() {
           const norm = normalizeState(body.data) || defaultState()
           setState(norm)
         }
+        serverUpdatedAtRef.current = body.updated_at ?? null
         hydratedRef.current = true
         setSyncStatus('idle')
         setLastSavedAt(Date.now())
@@ -215,6 +224,8 @@ function FlagCheckApp() {
   useEffect(() => {
     try { localStorage.setItem(storageKey(userId), JSON.stringify(state)) } catch {}
     if (!hydratedRef.current || !userId) return
+    // Don't auto-save over an unresolved conflict; wait for the user to choose.
+    if (conflict) return
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(async () => {
       setSyncStatus('saving')
@@ -223,9 +234,18 @@ function FlagCheckApp() {
         const res = await fetch('/api/data', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ data: state }),
+          body: JSON.stringify({ data: state, baseUpdatedAt: serverUpdatedAtRef.current }),
         })
+        if (res.status === 409) {
+          const body = await res.json()
+          console.warn('Sync conflict: server has a newer version.')
+          setConflict({ data: body.data, updated_at: body.updated_at })
+          setSyncStatus('conflict')
+          return
+        }
         if (!res.ok) throw new Error(`PUT /api/data ${res.status}`)
+        const body = await res.json()
+        serverUpdatedAtRef.current = body.updated_at ?? serverUpdatedAtRef.current
         setSyncStatus('idle')
         setLastSavedAt(Date.now())
       } catch (e) {
@@ -234,7 +254,7 @@ function FlagCheckApp() {
       }
     }, 800)
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
-  }, [state, userId, getToken])
+  }, [state, userId, getToken, conflict])
 
   useEffect(() => {
     const t = today()
@@ -319,6 +339,40 @@ function FlagCheckApp() {
     })
   }
 
+  // Conflict resolution: keep the server's version (discard local edits).
+  const resolveConflictKeepServer = () => {
+    if (!conflict) return
+    const norm = normalizeState(conflict.data) || defaultState()
+    serverUpdatedAtRef.current = conflict.updated_at ?? null
+    setConflict(null)
+    setState(norm)
+    setSyncStatus('idle')
+    setLastSavedAt(Date.now())
+  }
+
+  // Conflict resolution: force-push local edits, overwriting the server.
+  const resolveConflictKeepMine = async () => {
+    if (!conflict) return
+    setSyncStatus('saving')
+    try {
+      const token = await getToken()
+      const res = await fetch('/api/data', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ data: state, force: true }),
+      })
+      if (!res.ok) throw new Error(`PUT /api/data ${res.status}`)
+      const body = await res.json()
+      serverUpdatedAtRef.current = body.updated_at ?? null
+      setConflict(null)
+      setSyncStatus('idle')
+      setLastSavedAt(Date.now())
+    } catch (e) {
+      console.warn('Force overwrite failed.', e)
+      setSyncStatus('error')
+    }
+  }
+
   const snapshot = () => {
     const s = computeStats(active)
     updateActive(p => ({
@@ -339,11 +393,48 @@ function FlagCheckApp() {
   }
   const deleteJournal = (id) => updateActive(p => ({ ...p, journal: p.journal.filter(j => j.id !== id) }))
 
+  // Raw JSON backup: export the full state, and import (with confirmation) to restore.
+  const exportJson = () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `flag-check-backup-${new Date().toISOString().slice(0,10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  const importInputRef = useRef(null)
+  const triggerImport = () => importInputRef.current?.click()
+  const importJson = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-importing the same file
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      let norm
+      try {
+        norm = normalizeState(JSON.parse(reader.result))
+      } catch {
+        alert('Неуспешно четене на файла. Очаква се JSON архив от Flag Check.')
+        return
+      }
+      if (!norm) { alert('Невалиден архивен файл — няма профили.'); return }
+      if (!confirm('Това ще замени текущите профили с тези от архива. Продължи?')) return
+      setState(norm)
+    }
+    reader.readAsText(file)
+  }
+
   const [exporting, setExporting] = useState(false)
   const exportData = async () => {
     if (exporting) return
     setExporting(true)
     try {
+      // Lazy-load the heavy PDF libraries only when the user actually exports.
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas'),
+      ])
       const node = document.getElementById('pdf-report')
       if (!node) return
       const canvas = await html2canvas(node, {
@@ -456,6 +547,9 @@ Output exactly this structure in Bulgarian:
           <button className="btn-ghost" onClick={exportData} disabled={exporting} title="Експорт в PDF" aria-label="Експорт в PDF">
             {exporting ? <Loader2 size={16} className="spin" /> : <FileDown size={16} />}
           </button>
+          <button className="btn-ghost" onClick={exportJson} title="Запази архив (JSON)" aria-label="Запази архив"><Download size={16} /></button>
+          <button className="btn-ghost" onClick={triggerImport} title="Зареди архив (JSON)" aria-label="Зареди архив"><Upload size={16} /></button>
+          <input ref={importInputRef} type="file" accept="application/json,.json" onChange={importJson} style={{ display: 'none' }} />
           <button className="btn-ghost" onClick={snapshot} title="Запис на текущ резултат" aria-label="Запис"><Save size={16} /></button>
           <UserButton afterSignOutUrl="/" />
         </div>
@@ -482,6 +576,18 @@ Output exactly this structure in Bulgarian:
         </div>
       )}
 
+      {conflict && (
+        <div className="banner banner-conflict">
+          ⚠️
+          <span>
+            Профилът е променен от друго устройство{conflict.updated_at ? ` (${new Date(conflict.updated_at).toLocaleString()})` : ''}.
+            Запазването е спряно, за да не загубиш данни.
+          </span>
+          <button className="banner-action" onClick={resolveConflictKeepServer}>Зареди сървъра</button>
+          <button className="banner-action banner-action-danger" onClick={resolveConflictKeepMine}>Запази моите</button>
+        </div>
+      )}
+
       <div className="profile-bar">
         {state.profiles.map(p => {
           const ps = computeStats(p)
@@ -492,7 +598,6 @@ Output exactly this structure in Bulgarian:
               key={p.id}
               className={`profile-pill ${p.id === active.id ? 'active' : ''} ${isCompare && tab === 'compare' ? 'compare-sel' : ''}`}
               onClick={() => tab === 'compare' ? toggleCompare(p.id) : switchProfile(p.id)}
-              onDoubleClick={() => deleteProfile(p.id)}
             >
               {p.name}
               <span className="pct"> {ps.compat}%</span>
@@ -544,8 +649,34 @@ Output exactly this structure in Bulgarian:
             <Ring value={stats.greenPct} color="var(--green)" label="Зелено" sub={`${stats.greenChecked}/${active.green.length}`} />
             <Ring value={stats.redPct} color="var(--red)" label="Червено" sub={`${stats.redChecked}/${active.red.length}`} />
             <Ring value={stats.compat} color="var(--yellow)" label="Съвместимост" sub="претеглено" big />
+            <div className="score-breakdown">
+              <div className="score-breakdown-row">
+                <span>Зелени точки</span>
+                <span><strong style={{ color: 'var(--green)' }}>{stats.gScore}</strong> / {stats.gMax} = {stats.greenPct}%</span>
+              </div>
+              <div className="score-breakdown-row">
+                <span>Червени точки</span>
+                <span><strong style={{ color: 'var(--red)' }}>{stats.rScore}</strong> / {stats.rMax} = {stats.redPct}%</span>
+              </div>
+              <div className="score-breakdown-formula">
+                Съвместимост = зелено − червено = {stats.greenPct}% − {stats.redPct}% = <strong>{stats.compat}%</strong>
+              </div>
+              <div className="score-breakdown-note">Точките се претеглят: Основни ×3, Допълнителни ×1.</div>
+            </div>
           </section>
           <div className={`verdict ${verdict.cls}`}>{verdict.text}</div>
+          <details className="verdict-legend">
+            <summary>Как се определя присъдата?</summary>
+            <ul>
+              <li><span className="legend-dot legend-red" />Червено ≥ {RED_ALERT_PCT}% → „бягай“ (има приоритет над всичко)</li>
+              {VERDICT_BANDS.map(b => (
+                <li key={b.min}>
+                  <span className={`legend-dot ${b.cls === 'verdict-green' ? 'legend-green' : b.cls === 'verdict-red' ? 'legend-red' : 'legend-yellow'}`} />
+                  Съвместимост ≥ {b.min}% → {b.text}
+                </li>
+              ))}
+            </ul>
+          </details>
           <section className="dealbreaker-block">
             <div className="dealbreaker-block-title">🚩 Пречки (deal breakers)</div>
             {stats.triggeredDealbreakers.length > 0 ? (
@@ -689,6 +820,14 @@ Output exactly this structure in Bulgarian:
                   autoFocus
                   onKeyDown={e => { if (e.key === 'Enter') confirmModal() }}
                 />
+                {state.profiles.length > 1 && (
+                  <button
+                    className="modal-delete"
+                    onClick={() => { const id = active.id; setModal(null); deleteProfile(id) }}
+                  >
+                    <Trash2 size={14} /> Изтрий профил „{active.name}“
+                  </button>
+                )}
               </Fragment>
             )}
             <div className="modal-btns">
@@ -998,6 +1137,7 @@ function CompareView({ a, b }) {
 function SyncBadge({ status, lastSavedAt }) {
   if (status === 'loading') return <span className="sync-badge sync-loading"><Loader2 size={12} className="spin" /> Зареждам</span>
   if (status === 'saving') return <span className="sync-badge sync-saving"><Loader2 size={12} className="spin" /> Синхронизирам</span>
+  if (status === 'conflict') return <span className="sync-badge sync-error" title="Има по-нова версия на сървъра. Избери коя да запазиш от лентата отгоре."><AlertTriangle size={12} /> Конфликт</span>
   if (status === 'error') return <span className="sync-badge sync-error" title="Промените са в локалния кеш — ще се синхронизират когато се възстанови връзката."><CloudOff size={12} /> Офлайн</span>
   if (status === 'idle' && lastSavedAt) {
     return <span className="sync-badge sync-saved" title={new Date(lastSavedAt).toLocaleString()}><CloudCheck size={12} /> Автозапазено</span>
