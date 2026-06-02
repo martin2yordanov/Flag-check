@@ -131,8 +131,7 @@ function trendFor(profile) {
   return d > 0 ? { dir: 'up', d } : { dir: 'down', d }
 }
 
-function verdictFor(compat, redPct, dbTriggered) {
-  if (dbTriggered.length > 0) return { text: `🚩 Пречка: ${dbTriggered[0]}`, cls: 'verdict-red' }
+function verdictFor(compat, redPct) {
   if (redPct >= 40) return { text: '🚩 Прекалено много червени флагове — бягай', cls: 'verdict-red' }
   if (compat >= 70) return { text: '✨ Силен мач — продължи', cls: 'verdict-green' }
   if (compat >= 50) return { text: '👀 Обещаващо — наблюдавай', cls: 'verdict-yellow' }
@@ -443,7 +442,7 @@ Output exactly this structure in Bulgarian:
     }
   }
 
-  const verdict = verdictFor(stats.compat, stats.redPct, stats.triggeredDealbreakers)
+  const verdict = verdictFor(stats.compat, stats.redPct)
   const dbBanner = stats.triggeredDealbreakers.length > 0 && !bannerDismissed
 
   return (
@@ -547,6 +546,18 @@ Output exactly this structure in Bulgarian:
             <Ring value={stats.compat} color="var(--yellow)" label="Съвместимост" sub="претеглено" big />
           </section>
           <div className={`verdict ${verdict.cls}`}>{verdict.text}</div>
+          <section className="dealbreaker-block">
+            <div className="dealbreaker-block-title">🚩 Пречки (deal breakers)</div>
+            {stats.triggeredDealbreakers.length > 0 ? (
+              <ul className="dealbreaker-list">
+                {stats.triggeredDealbreakers.map((t, i) => (
+                  <li key={i}>{t}</li>
+                ))}
+              </ul>
+            ) : (
+              <div className="dealbreaker-empty">Няма активирани пречки</div>
+            )}
+          </section>
           <section className="card">
             <div className="card-title">
               <span>{active.name} · История</span>

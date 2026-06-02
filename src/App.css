@@ -402,13 +402,13 @@
 
 .results {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 20px;
   padding: 20px 14px;
   background: var(--panel);
   border-radius: 14px;
-  flex-wrap: wrap;
   margin-bottom: 16px;
 }
 .ring { display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -427,6 +427,35 @@
 .verdict-green { color: var(--green); }
 .verdict-yellow { color: var(--yellow); }
 .verdict-red { color: var(--red); }
+
+.dealbreaker-block {
+  background: var(--panel);
+  border: 1px solid rgba(255,69,58,0.35);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.dealbreaker-block-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--red);
+  margin-bottom: 8px;
+}
+.dealbreaker-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dealbreaker-list li {
+  color: var(--text);
+  font-size: 14px;
+}
+.dealbreaker-empty {
+  color: var(--muted);
+  font-size: 13px;
+}
 
 .card {
   background: var(--panel);
