@@ -1067,3 +1067,20 @@
 .flags-table tr.tr-green { background: rgba(0,200,117,0.04); }
 .color-pill.color-green { background: rgba(0,200,117,0.14); color: var(--green); }
 .color-pill.color-red { background: rgba(226,68,92,0.14); color: var(--red); }
+
+/* v3.2 — importance removed; weight shown inline; black background */
+/* Compact inline weight picker on the flag's title row (replaces the old chevron). */
+.row-main .weight-picker { gap: 3px; flex-shrink: 0; }
+.row-main .weight-seg {
+  width: 18px; height: 18px; border-radius: 5px;
+  font-size: 9px; font-weight: 700;
+}
+.row-main .weight-seg.on { background: var(--accent); color: #fff; }
+/* Drop list (flat column) reuses priority-over highlight when hovered */
+.drop-list { padding: 0; min-height: 8px; }
+.drop-list.priority-over {
+  background: rgba(108,108,255,0.08);
+  outline: 2px dashed rgba(108,108,255,0.35);
+  outline-offset: -2px;
+  border-radius: 10px;
+}

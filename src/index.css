@@ -1,10 +1,10 @@
 :root {
   /* Dark theme inspired by monday.com "Dark" mode: deep blue-charcoal surfaces,
      purple-blue primary accent, vivid status colors. */
-  --bg: #15172b;
-  --panel: #21243f;
-  --panel-2: #2c2f4d;
-  --panel-3: #3a3e63;
+  --bg: #000000;
+  --panel: #15172a;
+  --panel-2: #20233c;
+  --panel-3: #2c2f4d;
   --text: #e7e9f3;
   --muted: #9b9fc2;
   --green: #00c875;
