@@ -1,17 +1,23 @@
 :root {
-  --bg: #1c1c1e;
-  --panel: #2c2c2e;
-  --panel-2: #3a3a3c;
-  --panel-3: #48484a;
-  --text: #f2f2f7;
-  --muted: #8e8e93;
-  --green: #30d158;
-  --red: #ff453a;
-  --yellow: #ffd60a;
-  --blue: #0a84ff;
-  --orange: #ff9f0a;
-  --purple: #bf5af2;
+  /* Dark theme inspired by monday.com "Dark" mode: deep blue-charcoal surfaces,
+     purple-blue primary accent, vivid status colors. */
+  --bg: #15172b;
+  --panel: #21243f;
+  --panel-2: #2c2f4d;
+  --panel-3: #3a3e63;
+  --text: #e7e9f3;
+  --muted: #9b9fc2;
+  --green: #00c875;
+  --red: #e2445c;
+  --yellow: #fdab3d;
+  --accent: #6c6cff;
+  --accent-2: #5459e8;
+  --blue: #579bfc;
+  --orange: #ff9f3e;
+  --purple: #a25ddc;
   --divider: rgba(255,255,255,0.08);
+  --border: rgba(255,255,255,0.10);
+  --radius: 8px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body, #root { height: 100%; }
