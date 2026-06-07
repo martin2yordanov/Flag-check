@@ -890,3 +890,180 @@
 .note-inline:hover { background: var(--panel-2); }
 .note-inline:focus { background: var(--panel-2); border-color: rgba(120,160,255,0.4); }
 .note-inline::placeholder { color: var(--muted); opacity: 0.5; }
+
+/* ============================================================
+   v3.1 — monday.com-style dark redesign + new board/table
+   ============================================================ */
+
+/* Surfaces get a subtle border + soft shadow like monday cards */
+.card, .col, .results, .verdict, .verdict-legend, .modal {
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+.app { max-width: 1180px; }
+
+/* Header logo + version chip */
+.header h1 { display: inline-flex; align-items: center; gap: 8px; }
+.logo-icon { color: var(--accent); }
+.version {
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  background: var(--panel-2); border: 1px solid var(--border);
+  padding: 2px 8px; border-radius: 20px; letter-spacing: 0;
+}
+
+/* Primary accents → monday purple-blue */
+.profile-pill.active { background: var(--accent); color: #fff; }
+.tabs { border: 1px solid var(--border); }
+.tab.active { background: var(--accent); color: #fff; }
+.tab.active .tab-icon { opacity: 1; }
+.modal-btn-primary { background: var(--accent); }
+.mood-pill.sel { background: var(--accent); }
+.add-btn { display: flex; align-items: center; justify-content: center; }
+
+/* ---- Board: two sides, each = top banner + column ---- */
+.board {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 20px;
+}
+.side { display: flex; flex-direction: column; gap: 12px; }
+@media (max-width: 720px) { .board { grid-template-columns: 1fr; } }
+
+.board-banner {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--panel-3);
+  border-radius: var(--radius);
+  padding: 10px 12px 8px;
+  transition: outline 0.15s, background 0.15s;
+}
+.board-banner-green { border-top-color: var(--green); }
+.board-banner-red { border-top-color: var(--red); }
+.board-banner-head {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.6px; color: var(--muted); margin-bottom: 6px;
+}
+.board-banner-green .board-banner-head { color: var(--green); }
+.board-banner-red .board-banner-head { color: var(--red); }
+.board-banner .count { margin-left: auto; }
+.banner-list { padding: 0; }
+.board-banner.banner-over {
+  outline: 2px dashed rgba(108,108,255,0.55);
+  outline-offset: 2px;
+  background: rgba(108,108,255,0.07);
+}
+
+/* Special (must-have / dealbreaker) rows */
+.row-wrap.special .row-text { font-weight: 600; }
+.db-badge { display: inline-flex; align-items: center; }
+.db-badge-red { color: var(--red); }
+.db-badge-green { color: var(--yellow); }
+
+/* Inline rename + delete confirm */
+.row-edit {
+  flex: 1; background: var(--panel-2);
+  border: 1px solid var(--accent); border-radius: 6px;
+  padding: 4px 8px; color: var(--text); font-size: 15px; outline: none;
+}
+.row-confirm { display: flex; align-items: center; gap: 4px; }
+.row-confirm-yes {
+  background: var(--red); color: #fff; font-size: 11px; font-weight: 700;
+  padding: 5px 9px; border-radius: 6px;
+}
+.row-confirm-no {
+  width: 24px; height: 24px; border-radius: 6px; color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+}
+.row-confirm-no:active { background: var(--panel-2); }
+
+/* Row detail controls (importance + weight) */
+.detail-controls { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+.detail-field {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.detail-field select {
+  background: var(--panel-3); border: none; border-radius: 6px;
+  padding: 6px 8px; color: var(--text); font-size: 12px; outline: none; cursor: pointer;
+}
+.weight-picker { display: flex; gap: 4px; }
+.weight-seg {
+  width: 24px; height: 24px; border-radius: 6px;
+  background: var(--panel-3); color: var(--muted);
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.weight-seg.on { background: var(--accent); color: #fff; }
+
+/* Rings back to a horizontal row */
+.results { flex-direction: row; flex-wrap: wrap; gap: 28px; }
+.ring-sub { letter-spacing: 0; }
+
+/* Score breakdown as a full-width card */
+.score-breakdown { max-width: none; border-top: none; padding-top: 0; }
+.score-breakdown-formula strong { color: var(--accent); }
+
+/* Gates: dealbreakers + unmet must-haves side by side */
+.gates { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+@media (max-width: 560px) { .gates { grid-template-columns: 1fr; } }
+.gate-block {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+}
+.gate-red { border-left: 3px solid var(--red); }
+.gate-green { border-left: 3px solid var(--green); }
+.gate-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+.gate-red .gate-title { color: var(--red); }
+.gate-green .gate-title { color: var(--yellow); }
+.gate-block ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.gate-block li { font-size: 13px; color: var(--text); }
+.gate-empty { font-size: 12px; color: var(--muted); }
+
+/* ---- Editable table (monday-grid feel) ---- */
+.flags-table.editable td { vertical-align: middle; }
+.cell-input {
+  width: 100%; background: transparent; border: 1px solid transparent;
+  border-radius: 6px; padding: 6px 8px; color: var(--text); font-size: 13px;
+  outline: none; transition: background 0.15s, border-color 0.15s;
+}
+.cell-input:hover { background: var(--panel-2); }
+.cell-input:focus { background: var(--panel-2); border-color: var(--accent); }
+.flag-name-input { font-weight: 500; min-width: 130px; }
+.cell-select {
+  background: var(--panel-2); border: 1px solid transparent; border-radius: 6px;
+  padding: 6px 8px; color: var(--text); font-size: 12px; outline: none; cursor: pointer;
+}
+.cell-select:focus { border-color: var(--accent); }
+.priority-select-main { color: #b9b9ff; }
+.cell-segs { display: flex; gap: 3px; justify-content: center; }
+.cell-seg {
+  width: 15px; height: 22px; border-radius: 4px;
+  background: var(--panel-3); border: none; cursor: pointer;
+  transition: background 0.12s, transform 0.1s;
+}
+.cell-seg:active { transform: scale(0.9); }
+.cell-segs-green .cell-seg.on { background: var(--green); }
+.cell-segs-red .cell-seg.on { background: var(--red); }
+.cell-segs-neutral .cell-seg.on { background: var(--accent); }
+.td-points { font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.th-color, .th-weight, .th-points { text-align: center; width: 1%; white-space: nowrap; }
+.td-color, .td-weight, .td-points { text-align: center; }
+.th-actions, .td-actions { width: 1%; text-align: center; }
+.td-actions .row-del { width: 26px; height: 26px; margin: 0 auto; }
+.sortable { cursor: pointer; user-select: none; }
+.sortable:hover { color: var(--text); }
+.sort-icon { opacity: 0.35; vertical-align: middle; }
+.sortable.sorted { color: var(--accent); }
+.sortable.sorted .sort-icon { opacity: 1; }
+.flags-table tfoot td {
+  border-top: 2px solid var(--border); border-bottom: none;
+  font-size: 12px; color: var(--muted); padding: 12px 10px;
+}
+.table-total td { font-weight: 600; }
+.flags-table tr.tr-red { background: rgba(226,68,92,0.05); }
+.flags-table tr.tr-green { background: rgba(0,200,117,0.04); }
+.color-pill.color-green { background: rgba(0,200,117,0.14); color: var(--green); }
+.color-pill.color-red { background: rgba(226,68,92,0.14); color: var(--red); }
