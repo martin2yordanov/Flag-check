@@ -31,12 +31,9 @@ const storageKey = (userId) => userId ? `${STORAGE_KEY_PREFIX}:${userId}` : STOR
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2,8)}`
 const today = () => new Date().toISOString().slice(0,10)
 
-const PRIORITY_WEIGHTS = { main: 3, secondary: 1 }
-const priorityWeight = (p) => PRIORITY_WEIGHTS[p] ?? PRIORITY_WEIGHTS.main
-
 const LISTS = ['green', 'red', 'musthaves', 'dealbreakers']
 const newItem = (text) => ({
-  id: uid(), text, rating: 0, priority: 'main', weight: 3, note: '', ratedAt: null,
+  id: uid(), text, rating: 0, weight: 3, note: '', ratedAt: null,
 })
 const makeItems = (texts) => texts.map(newItem)
 
@@ -55,19 +52,13 @@ const normalizeItem = (i) => {
     ? i.rating
     : (i.checked ? 3 : 0)
   const ratedAt = i.ratedAt ?? i.checkedAt ?? null
-  // Migrate legacy weight (1-5) -> priority. weight >= 3 was meaningful → main.
-  let priority = i.priority
-  if (priority !== 'main' && priority !== 'secondary') {
-    priority = (typeof i.weight === 'number' && i.weight < 3) ? 'secondary' : 'main'
-  }
-  // Per-item numeric weight 1-5 (independent of importance). Reuse a legacy weight if valid.
+  // Per-item numeric weight 1-5 is the only importance signal now.
   const weight = (typeof i.weight === 'number' && i.weight >= 1 && i.weight <= 5) ? i.weight : 3
   return {
     note: '',
     ...i,
     rating,
     ratedAt,
-    priority,
     weight,
   }
 }
@@ -117,9 +108,9 @@ function loadLocal(userId) {
   return defaultState()
 }
 
-// Each flag contributes rating × per-item weight × importance multiplier.
-const itemScore = (i) => i.rating * (i.weight || 3) * priorityWeight(i.priority)
-const itemMax = (i) => 5 * (i.weight || 3) * priorityWeight(i.priority)
+// Each flag contributes rating × per-item weight (1-5).
+const itemScore = (i) => i.rating * (i.weight || 3)
+const itemMax = (i) => 5 * (i.weight || 3)
 
 function computeStats(profile) {
   const g = [...(profile.green || []), ...(profile.musthaves || [])]
@@ -520,11 +511,11 @@ function FlagCheckApp() {
   const runInsight = async () => {
     if (!state.apiKey) { setApiKey(); return }
     setInsight({ loading: true, text: '', error: '' })
-    const fmt = (i) => `${i.text} (rating ${i.rating}/5, weight ${i.weight}, ${i.priority})${i.note ? ' — ' + i.note : ''}`
+    const fmt = (i) => `${i.text} (rating ${i.rating}/5, weight ${i.weight})${i.note ? ' — ' + i.note : ''}`
     const greenAll = [...active.green, ...(active.musthaves || [])]
     const redAll = [...active.red, ...(active.dealbreakers || [])]
     const greenRated = greenAll.filter(i => i.rating > 0).map(fmt)
-    const greenUnrated = greenAll.filter(i => i.rating === 0).map(i => `${i.text} (${i.priority})`)
+    const greenUnrated = greenAll.filter(i => i.rating === 0).map(i => i.text)
     const redRated = redAll.filter(i => i.rating > 0).map(i => `${fmt(i)}${(active.dealbreakers || []).some(d => d.id === i.id) ? ' [DEALBREAKER]' : ''}`)
     const redUnrated = redAll.filter(i => i.rating === 0).map(i => i.text)
     const musthaves = (active.musthaves || []).map(i => `${i.text}${i.rating === 0 ? ' [UNMET]' : ''}`)
@@ -534,7 +525,7 @@ function FlagCheckApp() {
 
 Subject: ${active.name}
 Compatibility: ${stats.compat}% (green ${stats.greenPct}%, red ${stats.redPct}%)
-Each flag is rated 1-5 (intensity), has a numeric weight 1-5, and importance main (×3) or secondary (×1). Score contribution = rating × weight × importance.
+Each flag is rated 1-5 (intensity) and has a numeric weight 1-5. Score contribution = rating × weight.
 Must-haves are required green traits; unmet ones are serious. Dealbreakers are red traits that end it if present.
 
 Must-haves: ${musthaves.join('; ') || 'none'}
@@ -678,7 +669,6 @@ Output exactly this structure in Bulgarian:
         <Fragment>
           <Board
             profile={active}
-            expanded={expanded} setExpanded={setExpanded}
             onRate={setRating} onRemove={removeItem} onUpdate={updateItem} onMove={moveItem}
             newGreen={newGreen} setNewGreen={setNewGreen} addGreen={() => addItem('green', newGreen, setNewGreen)}
             newRed={newRed} setNewRed={setNewRed} addRed={() => addItem('red', newRed, setNewRed)}
@@ -700,7 +690,7 @@ Output exactly this structure in Bulgarian:
             <div className="score-breakdown-formula">
               Съвместимост = зелено − червено = {stats.greenPct}% − {stats.redPct}% = <strong>{stats.compat}%</strong>
             </div>
-            <div className="score-breakdown-note">Точки = оценка × тежест × важност (Основни ×3, Допълнителни ×1).</div>
+            <div className="score-breakdown-note">Точки = оценка (1–5) × тежест (1–5).</div>
           </div>
           <div className={`verdict ${verdict.cls}`}>{verdict.text}</div>
           <details className="verdict-legend card">
@@ -883,7 +873,7 @@ Output exactly this structure in Bulgarian:
 
 // One DndContext spanning both colours so items can be dragged between
 // green/red columns and the must-have/dealbreaker banners.
-function Board({ profile, expanded, setExpanded, onRate, onRemove, onUpdate, onMove, newGreen, setNewGreen, addGreen, newRed, setNewRed, addRed }) {
+function Board({ profile, onRate, onRemove, onUpdate, onMove, newGreen, setNewGreen, addGreen, newRed, setNewRed, addRed }) {
   const [activeId, setActiveId] = useState(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -905,26 +895,14 @@ function Board({ profile, expanded, setExpanded, onRate, onRemove, onUpdate, onM
     if (!fromList) return
     const overId = String(over.id)
 
-    // Resolve the drop target into { toList, priority? }.
-    let toList = null, priority = null
-    if (overId === 'zone:musthaves') toList = 'musthaves'
-    else if (overId === 'zone:dealbreakers') toList = 'dealbreakers'
-    else if (overId.startsWith('zone:')) {
-      const parts = overId.split(':') // zone:<color>:<priority>
-      toList = parts[1]; priority = parts[2]
-    } else {
-      const overList = findList(overId)
-      if (!overList) return
-      toList = overList
-      priority = (profile[overList] || []).find(i => i.id === overId)?.priority || null
-    }
-    if (!toList) return
+    // Resolve the drop target list: a zone (zone:green/red/musthaves/dealbreakers)
+    // or another item (→ that item's list).
+    let toList = null
+    if (overId.startsWith('zone:')) toList = overId.slice(5)
+    else toList = findList(overId)
+    if (!toList || !LISTS.includes(toList)) return
 
-    if (toList === fromList) {
-      if (priority) onUpdate(draggedId, { priority }) // reorder within a column = priority change
-    } else {
-      onMove(draggedId, toList, priority ? { priority } : {})
-    }
+    if (toList !== fromList) onMove(draggedId, toList)
   }
 
   return (
@@ -940,7 +918,7 @@ function Board({ profile, expanded, setExpanded, onRate, onRemove, onUpdate, onM
           accent="green" which="green" bannerZone="musthaves"
           columnTitle="Зелени флагове" bannerTitle="Задължителни" bannerIcon={Star}
           columnItems={profile.green} bannerItems={profile.musthaves || []}
-          expanded={expanded} setExpanded={setExpanded} activeId={activeId}
+          activeId={activeId}
           onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
           newValue={newGreen} setNewValue={setNewGreen} onAdd={addGreen}
         />
@@ -948,7 +926,7 @@ function Board({ profile, expanded, setExpanded, onRate, onRemove, onUpdate, onM
           accent="red" which="red" bannerZone="dealbreakers"
           columnTitle="Червени флагове" bannerTitle="Dealbreakers (пречки)" bannerIcon={Ban}
           columnItems={profile.red} bannerItems={profile.dealbreakers || []}
-          expanded={expanded} setExpanded={setExpanded} activeId={activeId}
+          activeId={activeId}
           onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
           newValue={newRed} setNewValue={setNewRed} onAdd={addRed}
         />
@@ -965,15 +943,12 @@ function Board({ profile, expanded, setExpanded, onRate, onRemove, onUpdate, onM
   )
 }
 
-function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, bannerIcon: BannerIcon, columnItems, bannerItems, expanded, setExpanded, activeId, onRate, onRemove, onUpdate, newValue, setNewValue, onAdd }) {
-  const main = columnItems.filter(i => i.priority === 'main')
-  const secondary = columnItems.filter(i => i.priority === 'secondary')
-
+function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, bannerIcon: BannerIcon, columnItems, bannerItems, activeId, onRate, onRemove, onUpdate, newValue, setNewValue, onAdd }) {
   return (
     <section className={`side side-${accent}`}>
       <BannerZone
         accent={accent} zone={bannerZone} title={bannerTitle} Icon={BannerIcon}
-        items={bannerItems} expanded={expanded} setExpanded={setExpanded}
+        items={bannerItems}
         onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} activeId={activeId}
       />
       <div className={`col col-${accent}`}>
@@ -982,15 +957,10 @@ function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, banner
           {columnTitle}
           <span className="count">{columnItems.filter(i => i.rating > 0).length}/{columnItems.length}</span>
         </h2>
-        <PrioritySection
-          accent={accent} which={which} priority="main" label="Основни" weightLabel="×3"
-          items={main} expanded={expanded} setExpanded={setExpanded}
-          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} activeId={activeId}
-        />
-        <PrioritySection
-          accent={accent} which={which} priority="secondary" label="Допълнителни" weightLabel="×1"
-          items={secondary} expanded={expanded} setExpanded={setExpanded}
-          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} activeId={activeId}
+        <DropList
+          zone={which} accent={accent} items={columnItems} activeId={activeId}
+          emptyHint="Пусни флаг тук или добави отдолу ↓"
+          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
         />
         <div className="add-row">
           <input
@@ -1005,7 +975,7 @@ function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, banner
   )
 }
 
-function BannerZone({ accent, zone, title, Icon, items, expanded, setExpanded, onRate, onRemove, onUpdate, activeId }) {
+function BannerZone({ accent, zone, title, Icon, items, onRate, onRemove, onUpdate, activeId }) {
   const { setNodeRef, isOver } = useDroppable({ id: `zone:${zone}` })
   return (
     <div className={`board-banner board-banner-${accent} ${isOver ? 'banner-over' : ''}`}>
@@ -1021,7 +991,6 @@ function BannerZone({ accent, zone, title, Icon, items, expanded, setExpanded, o
           items.map(item => (
             <SortableRow
               key={item.id} item={item} accent={accent} which={zone} special
-              expanded={expanded} setExpanded={setExpanded}
               onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
               isDragging={activeId === item.id}
             />
@@ -1032,40 +1001,30 @@ function BannerZone({ accent, zone, title, Icon, items, expanded, setExpanded, o
   )
 }
 
-function PrioritySection({ accent, which, priority, label, weightLabel, items, expanded, setExpanded, onRate, onRemove, onUpdate, activeId }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `zone:${which}:${priority}` })
+function DropList({ zone, accent, items, activeId, emptyHint, onRate, onRemove, onUpdate }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `zone:${zone}` })
   return (
-    <div className={`priority-section ${isOver ? 'priority-over' : ''}`}>
-      <div className={`priority-head priority-${priority}`}>
-        <span className="priority-label">{label}</span>
-        <span className="priority-weight">{weightLabel}</span>
-        <span className="priority-count">{items.length}</span>
-      </div>
-      <ul ref={setNodeRef} className={`list priority-list ${items.length === 0 ? 'priority-list-empty' : ''}`}>
-        {items.length === 0 ? (
-          <li className="priority-empty">Пусни флаг тук</li>
-        ) : (
-          items.map(item => (
-            <SortableRow
-              key={item.id} item={item} accent={accent} which={which}
-              expanded={expanded} setExpanded={setExpanded}
-              onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
-              isDragging={activeId === item.id}
-            />
-          ))
-        )}
-      </ul>
-    </div>
+    <ul ref={setNodeRef} className={`list drop-list ${isOver ? 'priority-over' : ''} ${items.length === 0 ? 'priority-list-empty' : ''}`}>
+      {items.length === 0 ? (
+        <li className="priority-empty">{emptyHint}</li>
+      ) : (
+        items.map(item => (
+          <SortableRow
+            key={item.id} item={item} accent={accent} which={zone}
+            onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
+            isDragging={activeId === item.id}
+          />
+        ))
+      )}
+    </ul>
   )
 }
 
-function SortableRow({ item, accent, which, special, expanded, setExpanded, onRate, onRemove, onUpdate, isDragging }) {
+function SortableRow({ item, accent, which, special, onRate, onRemove, onUpdate, isDragging }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: item.id })
   // Item is also a droppable target so drops can use its position as a hint.
   const { setNodeRef: setDropRef, isOver: isOverItem } = useDroppable({ id: item.id })
   const setRefs = (node) => { setNodeRef(node); setDropRef(node) }
-  const key = `${which}-${item.id}`
-  const isExp = expanded[key]
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(item.text)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -1105,12 +1064,7 @@ function SortableRow({ item, accent, which, special, expanded, setExpanded, onRa
                 {item.text}
               </span>
             )}
-            <button
-              className={`row-note-btn ${item.note ? 'has-note' : ''}`}
-              onClick={() => setExpanded(e => ({ ...e, [key]: !e[key] }))}
-              title="Бележки и опции"
-              aria-label="Бележки и опции"
-            >{isExp ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button>
+            <WeightPicker value={item.weight} onChange={(w) => onUpdate(item.id, { weight: w })} />
             {confirmDel ? (
               <span className="row-confirm">
                 <button className="row-confirm-yes" onClick={() => onRemove(item.id)}>Изтрий</button>
@@ -1123,40 +1077,13 @@ function SortableRow({ item, accent, which, special, expanded, setExpanded, onRa
           <Rating accent={accent} value={item.rating} onChange={(n) => onRate(item.id, n)} />
         </div>
       </div>
-      {isExp && (
-        <div className="row-detail">
-          <div className="detail-controls">
-            <label className="detail-field">
-              <span>Важност</span>
-              <select value={item.priority} onChange={e => onUpdate(item.id, { priority: e.target.value })}>
-                <option value="main">Основен (×3)</option>
-                <option value="secondary">Допълнителен (×1)</option>
-              </select>
-            </label>
-            <div className="detail-field">
-              <span>Тежест</span>
-              <WeightPicker value={item.weight} onChange={(w) => onUpdate(item.id, { weight: w })} />
-            </div>
-          </div>
-          <textarea
-            placeholder="Бележки / контекст…"
-            value={item.note || ''}
-            onChange={e => onUpdate(item.id, { note: e.target.value })}
-          />
-          {item.ratedAt && (
-            <div className="row-meta">
-              Оценено: {new Date(item.ratedAt).toLocaleString()}
-            </div>
-          )}
-        </div>
-      )}
     </li>
   )
 }
 
 function WeightPicker({ value, onChange }) {
   return (
-    <div className="weight-picker" role="radiogroup" aria-label="Тежест 1-5">
+    <div className="weight-picker" role="radiogroup" aria-label="Тежест 1-5" title="Тежест 1–5">
       {[1,2,3,4,5].map(n => (
         <button
           key={n} type="button"
@@ -1317,12 +1244,10 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
     push(profile.musthaves, 'green', 'musthave')
     push(profile.red, 'red', 'flag')
     push(profile.dealbreakers, 'red', 'dealbreaker')
-    const pr = (x) => (x.priority === 'main' ? 0 : 1)
     const sorters = {
-      // Default: green first, then red; within each, main first, then rating desc.
-      default: (a, b) => (a.color === b.color ? (pr(a) - pr(b) || b.rating - a.rating) : (a.color === 'green' ? -1 : 1)),
+      // Default: green first, then red; within each, by points desc.
+      default: (a, b) => (a.color === b.color ? (itemScore(b) - itemScore(a)) : (a.color === 'green' ? -1 : 1)),
       name: (a, b) => a.text.localeCompare(b.text, 'bg'),
-      priority: (a, b) => pr(a) - pr(b),
       rating: (a, b) => a.rating - b.rating,
       weight: (a, b) => (a.weight || 3) - (b.weight || 3),
       points: (a, b) => itemScore(a) - itemScore(b),
@@ -1365,7 +1290,6 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
             <tr>
               <SortTh k="color" label="" cls="th-color" />
               <SortTh k="name" label="Флаг" />
-              <SortTh k="priority" label="Важност" cls="th-priority" />
               <SortTh k="rating" label="Оценка" cls="th-rating" />
               <SortTh k="weight" label="Тежест" cls="th-weight" />
               <SortTh k="points" label="Точки" cls="th-points" />
@@ -1386,15 +1310,6 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
                     className="cell-input flag-name-input" type="text" value={item.text}
                     onChange={e => onUpdate(item.id, { text: e.target.value })}
                   />
-                </td>
-                <td className="td-priority">
-                  <select
-                    className={`cell-select priority-select-${item.priority}`}
-                    value={item.priority} onChange={e => onUpdate(item.id, { priority: e.target.value })}
-                  >
-                    <option value="main">Основен</option>
-                    <option value="secondary">Допълнителен</option>
-                  </select>
                 </td>
                 <td className="td-rating">
                   <CellSegs accent={item.color} value={item.rating} onChange={(n) => onRate(item.id, n)} />
@@ -1417,7 +1332,7 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
           </tbody>
           <tfoot>
             <tr className="table-total">
-              <td colSpan={5}>Общо точки</td>
+              <td colSpan={4}>Общо точки</td>
               <td className="td-points">
                 <span style={{ color: 'var(--green)' }}>+{stats.gScore}</span>
                 {' / '}
@@ -1461,9 +1376,6 @@ function PdfReport({ profile, stats, verdict }) {
         }} />
         {item.text}{item._tag ? ` ${item._tag}` : ''}
       </td>
-      <td style={{ padding: '6px 8px', borderBottom: '1px solid #2a2a2e', color: '#a0a0a8' }}>
-        {item.priority === 'main' ? 'Основен' : 'Допълнителен'}
-      </td>
       <td style={{ padding: '6px 8px', borderBottom: '1px solid #2a2a2e', textAlign: 'center', fontWeight: 600 }}>
         {item.rating > 0 ? `${item.rating}/5` : '—'}
       </td>
@@ -1478,7 +1390,6 @@ function PdfReport({ profile, stats, verdict }) {
   const headRow = (
     <tr style={{ color: '#a0a0a8', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6 }}>
       <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Флаг</th>
-      <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Важност</th>
       <th style={{ textAlign: 'center', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Оценка</th>
       <th style={{ textAlign: 'center', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Тежест</th>
       <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #2a2a2e' }}>Бележки</th>
@@ -1545,7 +1456,7 @@ function PdfReport({ profile, stats, verdict }) {
       )}
 
       <div style={{ marginTop: 24, paddingTop: 12, borderTop: '1px solid #2a2a2e', fontSize: 10, color: '#7a7a82' }}>
-        Поверително · поколение от Flag Check · точки = оценка (1-5) × тежест (1-5) × важност (Основен ×3 / Допълнителен ×1)
+        Поверително · поколение от Flag Check · точки = оценка (1–5) × тежест (1–5)
       </div>
     </div>
   )
