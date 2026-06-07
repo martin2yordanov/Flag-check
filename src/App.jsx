@@ -676,26 +676,13 @@ Output exactly this structure in Bulgarian:
 
       {tab === 'flags' && (
         <Fragment>
-          <main className="board">
-            <BoardSide
-              accent="green" which="green" bannerZone="musthaves"
-              columnTitle="Зелени флагове" bannerTitle="Задължителни" bannerIcon={Star}
-              columnItems={active.green} bannerItems={active.musthaves || []}
-              expanded={expanded} setExpanded={setExpanded}
-              onRate={setRating} onRemove={removeItem} onUpdate={updateItem} onMove={moveItem}
-              newValue={newGreen} setNewValue={setNewGreen}
-              onAdd={() => addItem('green', newGreen, setNewGreen)}
-            />
-            <BoardSide
-              accent="red" which="red" bannerZone="dealbreakers"
-              columnTitle="Червени флагове" bannerTitle="Dealbreakers (пречки)" bannerIcon={Ban}
-              columnItems={active.red} bannerItems={active.dealbreakers || []}
-              expanded={expanded} setExpanded={setExpanded}
-              onRate={setRating} onRemove={removeItem} onUpdate={updateItem} onMove={moveItem}
-              newValue={newRed} setNewValue={setNewRed}
-              onAdd={() => addItem('red', newRed, setNewRed)}
-            />
-          </main>
+          <Board
+            profile={active}
+            expanded={expanded} setExpanded={setExpanded}
+            onRate={setRating} onRemove={removeItem} onUpdate={updateItem} onMove={moveItem}
+            newGreen={newGreen} setNewGreen={setNewGreen} addGreen={() => addItem('green', newGreen, setNewGreen)}
+            newRed={newRed} setNewRed={setNewRed} addRed={() => addItem('red', newRed, setNewRed)}
+          />
           <section className="results">
             <Ring value={stats.greenPct} color="var(--green)" label="Зелено" sub={`${stats.greenChecked}/${stats.greenTotal}`} />
             <Ring value={stats.redPct} color="var(--red)" label="Червено" sub={`${stats.redChecked}/${stats.redTotal}`} />
@@ -894,7 +881,9 @@ Output exactly this structure in Bulgarian:
   )
 }
 
-function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, bannerIcon: BannerIcon, columnItems, bannerItems, expanded, setExpanded, onRate, onRemove, onUpdate, onMove, newValue, setNewValue, onAdd }) {
+// One DndContext spanning both colours so items can be dragged between
+// green/red columns and the must-have/dealbreaker banners.
+function Board({ profile, expanded, setExpanded, onRate, onRemove, onUpdate, onMove, newGreen, setNewGreen, addGreen, newRed, setNewRed, addRed }) {
   const [activeId, setActiveId] = useState(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -902,95 +891,116 @@ function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, banner
     useSensor(KeyboardSensor),
   )
 
-  const main = columnItems.filter(i => i.priority === 'main')
-  const secondary = columnItems.filter(i => i.priority === 'secondary')
-  const allItems = [...columnItems, ...bannerItems]
+  const allItems = LISTS.flatMap(k => (profile[k] || []))
   const activeItem = activeId ? allItems.find(i => i.id === activeId) : null
-  const inBanner = (id) => bannerItems.some(i => i.id === id)
+  const findList = (id) => LISTS.find(k => (profile[k] || []).some(i => i.id === id)) || null
+  const accentOf = (list) => (list === 'green' || list === 'musthaves') ? 'green' : 'red'
 
   const handleDragEnd = (event) => {
     setActiveId(null)
     const { active, over } = event
     if (!over) return
-    const overId = String(over.id)
     const draggedId = String(active.id)
-    const wasInBanner = inBanner(draggedId)
+    const fromList = findList(draggedId)
+    if (!fromList) return
+    const overId = String(over.id)
 
-    // Resolve the drop target to either the top banner zone or a column priority.
-    let target = null // 'banner' | 'main' | 'secondary'
-    if (overId === `zone:${bannerZone}`) target = 'banner'
-    else if (overId === 'zone:main' || overId === 'zone:secondary') target = overId.slice(5)
-    else {
-      const overItem = allItems.find(i => i.id === overId)
-      if (overItem) target = inBanner(overItem.id) ? 'banner' : overItem.priority
-    }
-    if (!target) return
-
-    if (target === 'banner') {
-      if (!wasInBanner) onMove(draggedId, bannerZone) // move into the top banner
-    } else if (wasInBanner) {
-      onMove(draggedId, which, { priority: target }) // move back down into the column
+    // Resolve the drop target into { toList, priority? }.
+    let toList = null, priority = null
+    if (overId === 'zone:musthaves') toList = 'musthaves'
+    else if (overId === 'zone:dealbreakers') toList = 'dealbreakers'
+    else if (overId.startsWith('zone:')) {
+      const parts = overId.split(':') // zone:<color>:<priority>
+      toList = parts[1]; priority = parts[2]
     } else {
-      const dragged = columnItems.find(i => i.id === draggedId)
-      if (dragged && dragged.priority !== target) onUpdate(draggedId, { priority: target })
+      const overList = findList(overId)
+      if (!overList) return
+      toList = overList
+      priority = (profile[overList] || []).find(i => i.id === overId)?.priority || null
+    }
+    if (!toList) return
+
+    if (toList === fromList) {
+      if (priority) onUpdate(draggedId, { priority }) // reorder within a column = priority change
+    } else {
+      onMove(draggedId, toList, priority ? { priority } : {})
     }
   }
 
   return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={(e) => setActiveId(String(e.active.id))}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveId(null)}
+    >
+      <main className="board">
+        <BoardSide
+          accent="green" which="green" bannerZone="musthaves"
+          columnTitle="Зелени флагове" bannerTitle="Задължителни" bannerIcon={Star}
+          columnItems={profile.green} bannerItems={profile.musthaves || []}
+          expanded={expanded} setExpanded={setExpanded} activeId={activeId}
+          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
+          newValue={newGreen} setNewValue={setNewGreen} onAdd={addGreen}
+        />
+        <BoardSide
+          accent="red" which="red" bannerZone="dealbreakers"
+          columnTitle="Червени флагове" bannerTitle="Dealbreakers (пречки)" bannerIcon={Ban}
+          columnItems={profile.red} bannerItems={profile.dealbreakers || []}
+          expanded={expanded} setExpanded={setExpanded} activeId={activeId}
+          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
+          newValue={newRed} setNewValue={setNewRed} onAdd={addRed}
+        />
+      </main>
+      <DragOverlay dropAnimation={null}>
+        {activeItem ? (
+          <div className={`row drag-overlay drag-overlay-${accentOf(findList(activeItem.id))}`}>
+            <span className="drag-handle" aria-hidden><GripVertical size={14} /></span>
+            <span className="row-text">{activeItem.text}</span>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  )
+}
+
+function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, bannerIcon: BannerIcon, columnItems, bannerItems, expanded, setExpanded, activeId, onRate, onRemove, onUpdate, newValue, setNewValue, onAdd }) {
+  const main = columnItems.filter(i => i.priority === 'main')
+  const secondary = columnItems.filter(i => i.priority === 'secondary')
+
+  return (
     <section className={`side side-${accent}`}>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={pointerWithin}
-        onDragStart={(e) => setActiveId(String(e.active.id))}
-        onDragEnd={handleDragEnd}
-        onDragCancel={() => setActiveId(null)}
-      >
-        <BannerZone
-          accent={accent} zone={bannerZone} title={bannerTitle} Icon={BannerIcon}
-          items={bannerItems} expanded={expanded} setExpanded={setExpanded}
+      <BannerZone
+        accent={accent} zone={bannerZone} title={bannerTitle} Icon={BannerIcon}
+        items={bannerItems} expanded={expanded} setExpanded={setExpanded}
+        onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} activeId={activeId}
+      />
+      <div className={`col col-${accent}`}>
+        <h2 className="col-title">
+          <span className={`dot dot-${accent}`} />
+          {columnTitle}
+          <span className="count">{columnItems.filter(i => i.rating > 0).length}/{columnItems.length}</span>
+        </h2>
+        <PrioritySection
+          accent={accent} which={which} priority="main" label="Основни" weightLabel="×3"
+          items={main} expanded={expanded} setExpanded={setExpanded}
           onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} activeId={activeId}
         />
-        <div className={`col col-${accent}`}>
-          <h2 className="col-title">
-            <span className={`dot dot-${accent}`} />
-            {columnTitle}
-            <span className="count">{columnItems.filter(i => i.rating > 0).length}/{columnItems.length}</span>
-          </h2>
-          {columnItems.length === 0 && (
-            <div className="empty col-empty">Все още няма флагове. Добави първия отдолу ↓</div>
-          )}
-          {columnItems.length > 0 && (
-            <Fragment>
-              <PrioritySection
-                accent={accent} which={which} priority="main" label="Основни" weightLabel="×3"
-                items={main} expanded={expanded} setExpanded={setExpanded}
-                onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} activeId={activeId}
-              />
-              <PrioritySection
-                accent={accent} which={which} priority="secondary" label="Допълнителни" weightLabel="×1"
-                items={secondary} expanded={expanded} setExpanded={setExpanded}
-                onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} activeId={activeId}
-              />
-            </Fragment>
-          )}
-          <div className="add-row">
-            <input
-              type="text" placeholder="Добави нов флаг…" value={newValue}
-              onChange={e => setNewValue(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') onAdd() }}
-            />
-            <button className={`add-btn add-btn-${accent}`} onClick={onAdd}><Plus size={16} /></button>
-          </div>
+        <PrioritySection
+          accent={accent} which={which} priority="secondary" label="Допълнителни" weightLabel="×1"
+          items={secondary} expanded={expanded} setExpanded={setExpanded}
+          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} activeId={activeId}
+        />
+        <div className="add-row">
+          <input
+            type="text" placeholder="Добави нов флаг…" value={newValue}
+            onChange={e => setNewValue(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') onAdd() }}
+          />
+          <button className={`add-btn add-btn-${accent}`} onClick={onAdd}><Plus size={16} /></button>
         </div>
-        <DragOverlay dropAnimation={null}>
-          {activeItem ? (
-            <div className={`row drag-overlay drag-overlay-${accent}`}>
-              <span className="drag-handle" aria-hidden><GripVertical size={14} /></span>
-              <span className="row-text">{activeItem.text}</span>
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+      </div>
     </section>
   )
 }
@@ -1023,7 +1033,7 @@ function BannerZone({ accent, zone, title, Icon, items, expanded, setExpanded, o
 }
 
 function PrioritySection({ accent, which, priority, label, weightLabel, items, expanded, setExpanded, onRate, onRemove, onUpdate, activeId }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `zone:${priority}` })
+  const { setNodeRef, isOver } = useDroppable({ id: `zone:${which}:${priority}` })
   return (
     <div className={`priority-section ${isOver ? 'priority-over' : ''}`}>
       <div className={`priority-head priority-${priority}`}>
