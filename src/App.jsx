@@ -16,6 +16,7 @@ import {
 import {
   SortableContext,
   horizontalListSortingStrategy,
+  verticalListSortingStrategy,
   useSortable,
   arrayMove,
 } from '@dnd-kit/sortable'
@@ -24,7 +25,7 @@ import {
   KeyRound, FileDown, Save, Pencil, Plus, X, ChevronDown, ChevronRight,
   GripVertical, Flag, Sparkles, Brain, Flame, BarChart3, Table as TableIcon,
   BookOpen, GitCompare, Check, AlertTriangle, TrendingUp, TrendingDown,
-  Loader2, CloudOff, CloudCheck, Download, Upload, Trash2, Star, ArrowUpDown, Ban, Copy,
+  Loader2, CloudOff, CloudCheck, Download, Upload, Trash2, Star, ArrowUpDown, Ban, Copy, Eye, EyeOff,
 } from 'lucide-react'
 import './App.css'
 
@@ -1515,32 +1516,39 @@ function SyncBadge({ status, lastSavedAt }) {
 
 function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
   const [sort, setSort] = useState({ key: 'default', dir: 1 })
+  const [hideEmpty, setHideEmpty] = useState(false)
+  const [manualOrder, setManualOrder] = useState([]) // ids, manual tiebreak within equal points
 
-  const rows = useMemo(() => {
+  const baseRows = useMemo(() => {
     const list = []
     const push = (arr, color, kind) => (arr || []).forEach(i => list.push({ ...i, color, kind }))
     push(profile.green, 'green', 'flag')
     push(profile.musthaves, 'green', 'musthave')
     push(profile.red, 'red', 'flag')
     push(profile.dealbreakers, 'red', 'dealbreaker')
-    const sorters = {
-      // Default: green first, then red; within each, by points desc.
-      default: (a, b) => (a.color === b.color ? (itemScore(b) - itemScore(a)) : (a.color === 'green' ? -1 : 1)),
-      name: (a, b) => a.text.localeCompare(b.text, 'bg'),
-      rating: (a, b) => a.rating - b.rating,
-      weight: (a, b) => (a.weight || 2) - (b.weight || 2),
-      points: (a, b) => itemScore(a) - itemScore(b),
-      color: (a, b) => (a.color === 'green' ? -1 : 1),
-    }
-    const fn = sorters[sort.key] || sorters.default
-    list.sort((a, b) => (sort.key === 'default' ? fn(a, b) : fn(a, b) * sort.dir))
     return list
-  }, [profile, sort])
+  }, [profile])
+
+  const sorters = {
+    name: (a, b) => a.text.localeCompare(b.text, 'bg'),
+    rating: (a, b) => a.rating - b.rating,
+    weight: (a, b) => (a.weight || 2) - (b.weight || 2),
+    points: (a, b) => itemScore(a) - itemScore(b),
+    color: (a, b) => (a.color === 'green' ? -1 : 1),
+  }
+  const orderIdx = (id) => { const k = manualOrder.indexOf(id); return k === -1 ? Number.MAX_SAFE_INTEGER : k }
+  const visible = hideEmpty ? baseRows.filter(i => i.rating > 0) : baseRows
+  const rows = [...visible].sort((a, b) => {
+    if (sort.key !== 'default') return sorters[sort.key](a, b) * sort.dir
+    // Auto: by points (weight×rating) desc, then manual order, then weight & rating.
+    return (itemScore(b) - itemScore(a))
+      || (orderIdx(a.id) - orderIdx(b.id))
+      || ((b.weight || 2) - (a.weight || 2))
+      || (b.rating - a.rating)
+  })
 
   const stats = computeStats(profile)
-  // This page's logic is pure point-summing: total = green points − red points.
   const net = stats.gScore - stats.rScore
-  // Bands as a share of the max attainable positive score (gMax).
   const tAvg = Math.round(stats.gMax * 0.20)
   const tGood = Math.round(stats.gMax * 0.45)
   const tExc = Math.round(stats.gMax * 0.70)
@@ -1549,6 +1557,7 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
   const [colOrder, setColOrder] = useState(loadColOrder)
   const colSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }),
     useSensor(KeyboardSensor),
   )
   const onColDragEnd = ({ active, over }) => {
@@ -1559,17 +1568,16 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
       return next
     })
   }
+  const onRowDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return
+    const ids = rows.map(r => r.id)
+    setManualOrder(arrayMove(ids, ids.indexOf(active.id), ids.indexOf(over.id)))
+    setSort({ key: 'default', dir: 1 })
+  }
 
-  // Column definitions: header meta + per-row cell renderer. Order is driven by colOrder.
+  // Column metadata + default cell renderers (points & actions are rendered in TableRow).
   const COLS = {
-    actions: {
-      cls: 'th-actions', label: '',
-      cell: (item) => (
-        <td className="td-actions" key="actions">
-          <button className="row-del" onClick={() => { if (confirm(`Изтрий „${item.text}“?`)) onRemove(item.id) }} title="Изтрий" aria-label="Изтрий"><X size={13} /></button>
-        </td>
-      ),
-    },
+    actions: { cls: 'th-actions', label: '' },
     color: {
       cls: 'th-color', label: '', sortKey: 'color',
       cell: (item) => (
@@ -1600,12 +1608,7 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
         <td className="td-weight" key="weight"><CellSegs accent="neutral" count={3} value={item.weight || 2} onChange={(n) => onUpdate(item.id, { weight: n })} /></td>
       ),
     },
-    points: {
-      cls: 'th-points', label: 'Точки', sortKey: 'points',
-      cell: (item) => (
-        <td className={`td-points td-points-${item.color}`} key="points">{item.color === 'red' ? '−' : '+'}{itemScore(item)}</td>
-      ),
-    },
+    points: { cls: 'th-points', label: 'Точки', sortKey: 'points' },
     note: {
       label: 'Бележки',
       cell: (item) => (
@@ -1616,11 +1619,23 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
     },
   }
   const orderedIds = colOrder.filter(id => COLS[id])
+  const rowIds = rows.map(r => r.id)
 
-  if (rows.length === 0) {
+  const banner = (
+    <div className="table-banner">
+      <span className="table-banner-title"><TableIcon size={14} /> {profile.name} · Таблица на флаговете</span>
+      <span className="table-count"><Flag size={12} /> {baseRows.length} ФЛАГА</span>
+      <button className="table-toggle" onClick={() => setHideEmpty(h => !h)}>
+        {hideEmpty ? <Eye size={13} /> : <EyeOff size={13} />}
+        {hideEmpty ? 'Покажи празните полета' : 'Скрий празните полета'}
+      </button>
+    </div>
+  )
+
+  if (baseRows.length === 0) {
     return (
       <section className="card">
-        <div className="card-title">{profile.name} · Таблица на флаговете</div>
+        {banner}
         <div className="empty">Все още няма флагове. Добави в раздел Флагове.</div>
       </section>
     )
@@ -1628,12 +1643,7 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
 
   return (
     <section className="card">
-      <div className="card-title">
-        <span>{profile.name} · Таблица на флаговете</span>
-        <span style={{ color: 'var(--muted)', fontSize: 11, textTransform: 'none', letterSpacing: 0 }}>
-          {rows.length} {rows.length === 1 ? 'флаг' : 'флага'} · влачи заглавие за разместване
-        </span>
-      </div>
+      {banner}
       <div className="flags-table-wrap">
         <table className="flags-table editable">
           <thead>
@@ -1647,13 +1657,15 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
               </SortableContext>
             </DndContext>
           </thead>
-          <tbody>
-            {rows.map(item => (
-              <tr key={`${item.color}-${item.id}`} className={`tr-${item.color}`}>
-                {orderedIds.map(id => COLS[id].cell(item))}
-              </tr>
-            ))}
-          </tbody>
+          <DndContext sensors={colSensors} collisionDetection={closestCenter} onDragEnd={onRowDragEnd}>
+            <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
+              <tbody>
+                {rows.map(item => (
+                  <TableRow key={item.id} item={item} orderedIds={orderedIds} COLS={COLS} onRemove={onRemove} />
+                ))}
+              </tbody>
+            </SortableContext>
+          </DndContext>
           <tfoot>
             <tr className="table-total">
               <td colSpan={orderedIds.length}>
@@ -1665,8 +1677,13 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
                     <span className="guide-max">макс +{stats.gMax}</span>
                   </div>
                   <div className="total-right">
-                    <span className="total-label">Общо точки</span>
-                    <span className={`total-points ${net >= tExc ? 'lvl-exc' : net >= tGood ? 'lvl-good' : net >= tAvg ? 'lvl-avg' : 'lvl-low'}`}>{net}</span>
+                    <div className="total-line">
+                      <span className="total-label">Общ брой точки</span>
+                      <span className={`total-points ${net >= tExc ? 'lvl-exc' : net >= tGood ? 'lvl-good' : net >= tAvg ? 'lvl-avg' : 'lvl-low'}`}>{net}</span>
+                    </div>
+                    <div className="total-sub">
+                      <span style={{ color: 'var(--green)' }}>{stats.gScore} зелени</span> − <span style={{ color: 'var(--red)' }}>{stats.rScore} червени</span> = {net}
+                    </div>
                   </div>
                 </div>
               </td>
@@ -1675,6 +1692,45 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
         </table>
       </div>
     </section>
+  )
+}
+
+function TableRow({ item, orderedIds, COLS, onRemove }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
+  const [confirmDel, setConfirmDel] = useState(false)
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
+  const score = itemScore(item)
+  const sign = score === 0 ? '' : (item.color === 'red' ? '−' : '+')
+  return (
+    <tr ref={setNodeRef} style={style} className={`tr-${item.color}`}>
+      {orderedIds.map(id => {
+        if (id === 'actions') {
+          return (
+            <td className="td-actions" key="actions">
+              {confirmDel ? (
+                <span className="row-confirm">
+                  <button className="row-confirm-yes" onClick={() => onRemove(item.id)}>Изтрий</button>
+                  <button className="row-confirm-no" onClick={() => setConfirmDel(false)} aria-label="Отказ"><X size={12} /></button>
+                </span>
+              ) : (
+                <button className="row-del" onClick={() => setConfirmDel(true)} title="Изтрий" aria-label="Изтрий"><X size={13} /></button>
+              )}
+            </td>
+          )
+        }
+        if (id === 'points') {
+          return (
+            <td className={`td-points td-points-${item.color}`} key="points">
+              <span className="points-cell">
+                <button className="row-grip" {...attributes} {...listeners} title="Влачи за подреждане" aria-label="Подреди"><GripVertical size={12} /></button>
+                <span>{sign}{score}</span>
+              </span>
+            </td>
+          )
+        }
+        return COLS[id].cell(item)
+      })}
+    </tr>
   )
 }
 
