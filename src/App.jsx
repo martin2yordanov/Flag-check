@@ -50,6 +50,36 @@ const CATEGORIES = [
 const CATEGORY_IDS = CATEGORIES.map(c => c.id)
 const DEFAULT_CATEGORY = 'personal'
 
+// Curated suggestion library (evaluating a woman) — tap to add to the current profile.
+const SUGGESTED = {
+  green: [
+    { text: 'Плаща си сама сметката', category: 'qualities' },
+    { text: 'Пита за мнението ми и се вслушва в съветите ми', category: 'eq' },
+    { text: 'Признава кога греши и се извинява първа', category: 'eq' },
+    { text: 'Има доверие — не рови в телефона ми', category: 'personal' },
+    { text: 'Говори ме хубаво пред други хора', category: 'eq' },
+    { text: 'Не вади стари кавги по време на нов спор', category: 'eq' },
+    { text: 'Финансово отговорна — не живее над възможностите си', category: 'qualities' },
+    { text: 'Уважава времето ми с приятели и семейство', category: 'personal' },
+    { text: 'Приема ме такъв, не се опитва да ме „поправя"', category: 'qualities' },
+    { text: 'Поема инициатива за планове, не чака само мен', category: 'personal' },
+    { text: 'Любопитна и се развива — чете, учи, има интереси', category: 'qualities' },
+    { text: 'Спокойна е около мои колежки и приятелки', category: 'eq' },
+  ],
+  red: [
+    { text: 'Синдром на жертвата', category: 'qualities' },
+    { text: 'Тества ме с игрички и мълчаливи проверки', category: 'eq' },
+    { text: 'Флиртува с други, за да ме ревнува', category: 'personal' },
+    { text: 'Сравнява ме с бившите си', category: 'eq' },
+    { text: 'Заплашва с раздяла при всеки спор', category: 'eq' },
+    { text: 'Говори лошо за мен пред приятелките си', category: 'eq' },
+    { text: 'Лъже за дребни неща', category: 'qualities' },
+    { text: 'Държи се различно на публично и насаме', category: 'qualities' },
+    { text: 'Прекалено зависима — не може да е сама', category: 'personal' },
+    { text: 'Импулсивно харчене / разчита само на мен финансово', category: 'qualities' },
+  ],
+}
+
 // Default left→right order of the editable table's columns (notes last).
 const TABLE_COL_IDS = ['actions', 'color', 'name', 'rating', 'weight', 'points', 'note']
 const COL_ORDER_KEY = 'flag-check-table-cols'
@@ -386,6 +416,16 @@ function FlagCheckApp() {
     updateActive(p => ({ ...p, [which]: [...(p[which] || []), newItem(v)] }))
     setText('')
   }
+  // Add a suggested flag (with a preset category) to the current profile.
+  const addFlag = (which, text, category) => {
+    updateActive(p => ({ ...p, [which]: [...(p[which] || []), { ...newItem(text), category }] }))
+  }
+  const catLabel = (id) => CATEGORIES.find(c => c.id === id)?.label || ''
+  const hasFlag = (which, text) => {
+    const t = text.trim().toLowerCase()
+    const lists = which === 'green' ? [active.green, active.musthaves] : [active.red, active.dealbreakers]
+    return lists.some(l => (l || []).some(i => (i.text || '').trim().toLowerCase() === t))
+  }
 
   const addProfile = () => { setModal({ type: 'newProfile' }); setModalInput('') }
   const setApiKey = () => { setModal({ type: 'apiKey' }); setModalInput(state.apiKey || '') }
@@ -634,6 +674,7 @@ Output exactly this structure in Bulgarian:
         </h1>
         <div className="header-actions">
           <SyncBadge status={syncStatus} lastSavedAt={lastSavedAt} />
+          <button className="btn-ghost" onClick={() => setModal({ type: 'suggest' })} title="Предложени флагове" aria-label="Предложени флагове"><Sparkles size={16} /></button>
           <button className="btn-ghost" onClick={renameProfile} title="Преименувай профил" aria-label="Преименувай профил"><Pencil size={16} /></button>
           <button className="btn-ghost" onClick={setApiKey} title="API ключ" aria-label="API ключ"><KeyRound size={16} /></button>
           <button className="btn-ghost" onClick={exportData} disabled={exporting} title="Експорт в PDF" aria-label="Експорт в PDF">
@@ -899,6 +940,36 @@ Output exactly this structure in Bulgarian:
                 />
               </Fragment>
             )}
+            {modal.type === 'suggest' && (
+              <Fragment>
+                <h3>Предложени флагове</h3>
+                <div className="modal-help">Докосни „+“, за да добавиш към „{active.name}“. Базирано на психология (Gottman, Perel, „Attached“).</div>
+                <div className="suggest-list">
+                  <div className="suggest-group-title sg-green">🟢 Зелени</div>
+                  {SUGGESTED.green.map(s => {
+                    const added = hasFlag('green', s.text)
+                    return (
+                      <div key={s.text} className="suggest-row">
+                        <span className="suggest-text">{s.text}</span>
+                        <span className="suggest-cat">{catLabel(s.category)}</span>
+                        <button className="suggest-add sg-green" disabled={added} onClick={() => addFlag('green', s.text, s.category)}>{added ? <Check size={14} /> : <Plus size={14} />}</button>
+                      </div>
+                    )
+                  })}
+                  <div className="suggest-group-title sg-red">🔴 Червени</div>
+                  {SUGGESTED.red.map(s => {
+                    const added = hasFlag('red', s.text)
+                    return (
+                      <div key={s.text} className="suggest-row">
+                        <span className="suggest-text">{s.text}</span>
+                        <span className="suggest-cat">{catLabel(s.category)}</span>
+                        <button className="suggest-add sg-red" disabled={added} onClick={() => addFlag('red', s.text, s.category)}>{added ? <Check size={14} /> : <Plus size={14} />}</button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </Fragment>
+            )}
             {modal.type === 'renameProfile' && (
               <Fragment>
                 <h3>Преименувай профил</h3>
@@ -922,8 +993,14 @@ Output exactly this structure in Bulgarian:
               </Fragment>
             )}
             <div className="modal-btns">
-              <button className="modal-btn modal-btn-cancel" onClick={() => setModal(null)}>Отказ</button>
-              <button className="modal-btn modal-btn-primary" onClick={confirmModal}>Запази</button>
+              {modal.type === 'suggest' ? (
+                <button className="modal-btn modal-btn-primary" onClick={() => setModal(null)}>Готово</button>
+              ) : (
+                <Fragment>
+                  <button className="modal-btn modal-btn-cancel" onClick={() => setModal(null)}>Отказ</button>
+                  <button className="modal-btn modal-btn-primary" onClick={confirmModal}>Запази</button>
+                </Fragment>
+              )}
             </div>
           </div>
         </div>
