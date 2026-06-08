@@ -42,8 +42,7 @@ const LISTS = ['green', 'red', 'musthaves', 'dealbreakers']
 const CATEGORIES = [
   { id: 'sex', label: 'Секс', color: '#ff5d8f', icon: '🔥' },
   { id: 'eq', label: 'Емоционална интелигентност', color: '#579bfc', icon: '🧠' },
-  { id: 'friendship', label: 'Приятелство', color: '#fdab3d', icon: '🤝' },
-  { id: 'qualities', label: 'Лични качества', color: '#00c875', icon: '⭐' },
+  { id: 'qualities', label: 'Качества', color: '#00c875', icon: '⭐' },
   { id: 'personal', label: 'Личен живот', color: '#a25ddc', icon: '🏠' },
 ]
 const CATEGORY_IDS = CATEGORIES.map(c => c.id)
