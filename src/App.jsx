@@ -26,8 +26,10 @@ import {
   BookOpen, GitCompare, Check, AlertTriangle, TrendingUp, TrendingDown,
   Loader2, CloudOff, CloudCheck, Download, Upload, Trash2, Star, ArrowUpDown, Ban,
 } from 'lucide-react'
-import pkg from '../package.json'
 import './App.css'
+
+// Injected by vite.config.js at build time; bumps on every push (git commit count).
+const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.2.0'
 
 const DEFAULT_GREEN = []
 const DEFAULT_RED = []
@@ -155,7 +157,16 @@ function computeStats(profile) {
   const rScore = r.reduce((s,i)=>s + itemScore(i), 0)
   const greenPct = Math.round((gScore / gMax) * 100)
   const redPct = Math.round((rScore / rMax) * 100)
-  const compat = Math.max(0, Math.min(100, Math.round(greenPct - redPct)))
+
+  // Smarter compatibility: blend (a) how the weighted intensity splits between
+  // green and red, with (b) how the sheer NUMBER of flags splits green vs red.
+  // This way "4 more green flags than red" actually lifts the score instead of
+  // a naive greenPct − redPct that ignores volume.
+  const gCount = g.length, rCount = r.length
+  const intensityShare = (gScore + rScore) > 0 ? gScore / (gScore + rScore) : 0.5
+  const countShare = (gCount + rCount) > 0 ? gCount / (gCount + rCount) : 0.5
+  const compat = Math.max(0, Math.min(100, Math.round((0.7 * intensityShare + 0.3 * countShare) * 100)))
+
   // Gates: triggered dealbreakers (present red) and unmet must-haves (absent green).
   const triggeredDealbreakers = (profile.dealbreakers || []).filter(i => i.rating > 0).map(i => i.text)
   const unmetMusthaves = (profile.musthaves || []).filter(i => i.rating === 0).map(i => i.text)
@@ -163,6 +174,8 @@ function computeStats(profile) {
     greenChecked: g.filter(i=>i.rating > 0).length, greenTotal: g.length,
     redChecked: r.filter(i=>i.rating > 0).length, redTotal: r.length,
     greenPct, redPct, compat, triggeredDealbreakers, unmetMusthaves,
+    intensityShare: Math.round(intensityShare * 100), countShare: Math.round(countShare * 100),
+    gCount, rCount,
     // Weighted-point breakdown so the compatibility number is transparent.
     gScore, gMax, rScore, rMax,
   }
@@ -617,7 +630,7 @@ Output exactly this structure in Bulgarian:
         <h1>
           <Flag size={18} className="logo-icon" />
           Flag Check
-          <span className="version">v{pkg.version}</span>
+          <span className="version">v{APP_VERSION}</span>
         </h1>
         <div className="header-actions">
           <SyncBadge status={syncStatus} lastSavedAt={lastSavedAt} />
@@ -720,17 +733,25 @@ Output exactly this structure in Bulgarian:
           </section>
           <div className="score-breakdown card">
             <div className="score-breakdown-row">
-              <span>Зелени точки</span>
-              <span><strong style={{ color: 'var(--green)' }}>{stats.gScore}</strong> / {stats.gMax} = {stats.greenPct}%</span>
+              <span>Зелени точки · брой</span>
+              <span><strong style={{ color: 'var(--green)' }}>{stats.gScore}</strong> т. · {stats.gCount} флага</span>
             </div>
             <div className="score-breakdown-row">
-              <span>Червени точки</span>
-              <span><strong style={{ color: 'var(--red)' }}>{stats.rScore}</strong> / {stats.rMax} = {stats.redPct}%</span>
+              <span>Червени точки · брой</span>
+              <span><strong style={{ color: 'var(--red)' }}>{stats.rScore}</strong> т. · {stats.rCount} флага</span>
+            </div>
+            <div className="score-breakdown-row">
+              <span>Интензитет (зелено дял)</span>
+              <span>{stats.intensityShare}% <span style={{ color: 'var(--muted)' }}>· тегло 70%</span></span>
+            </div>
+            <div className="score-breakdown-row">
+              <span>Баланс по брой (зелено дял)</span>
+              <span>{stats.countShare}% <span style={{ color: 'var(--muted)' }}>· тегло 30%</span></span>
             </div>
             <div className="score-breakdown-formula">
-              Съвместимост = зелено − червено = {stats.greenPct}% − {stats.redPct}% = <strong>{stats.compat}%</strong>
+              Съвместимост = 0.7×{stats.intensityShare}% + 0.3×{stats.countShare}% = <strong>{stats.compat}%</strong>
             </div>
-            <div className="score-breakdown-note">Точки = оценка (1–5) × тежест (1–3).</div>
+            <div className="score-breakdown-note">Отчита и интензитета (оценка×тежест), и колко флага има от всеки цвят. Точки = оценка (1–5) × тежест (1–3).</div>
           </div>
           <div className={`verdict ${verdict.cls}`}>{verdict.text}</div>
           <details className="verdict-legend card">
@@ -845,7 +866,7 @@ Output exactly this structure in Bulgarian:
       )}
 
       <footer className="footer">
-        {active.green.length + active.red.length + (active.musthaves?.length || 0) + (active.dealbreakers?.length || 0)} флага · {state.profiles.length} {state.profiles.length === 1 ? 'профил' : 'профила'} · автозапазено · v{pkg.version}
+        {active.green.length + active.red.length + (active.musthaves?.length || 0) + (active.dealbreakers?.length || 0)} флага · {state.profiles.length} {state.profiles.length === 1 ? 'профил' : 'профила'} · автозапазено · v{APP_VERSION}
       </footer>
 
       <PdfReport profile={active} stats={stats} verdict={verdict} />
