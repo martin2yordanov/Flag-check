@@ -25,7 +25,7 @@ import {
   KeyRound, FileDown, Save, Pencil, Plus, X, ChevronDown, ChevronRight,
   GripVertical, Flag, Sparkles, Brain, Flame, BarChart3, Table as TableIcon,
   BookOpen, GitCompare, Check, AlertTriangle, TrendingUp, TrendingDown,
-  Loader2, CloudOff, CloudCheck, Download, Upload, Trash2, Star, ArrowUpDown, Ban, Eye, EyeOff,
+  Loader2, CloudOff, CloudCheck, Download, Upload, Trash2, Star, ArrowUpDown, Ban, Copy, Eye, EyeOff,
 } from 'lucide-react'
 import './App.css'
 
@@ -467,6 +467,37 @@ function FlagCheckApp() {
   const addProfile = () => { setModal({ type: 'newProfile' }); setModalInput('') }
   const setApiKey = () => { setModal({ type: 'apiKey' }); setModalInput(state.apiKey || '') }
   const renameProfile = () => { setModal({ type: 'renameProfile' }); setModalInput(active?.name || '') }
+  const openCopyFrom = () => setModal({ type: 'copyFrom' })
+  // Copy all flags from a source profile into the active one, preserving text,
+  // category, weight (but resetting the per-profile rating — same criteria,
+  // different evaluation). Skips entries with text already in the active list.
+  const copyFromProfile = (sourceId) => {
+    const source = state.profiles.find(p => p.id === sourceId)
+    if (!source || source.id === active.id) { setModal(null); return }
+    const cloneItems = (existing, incoming) => {
+      const have = new Set((existing || []).map(i => (i.text || '').trim().toLowerCase()))
+      const fresh = (incoming || [])
+        .filter(i => !have.has((i.text || '').trim().toLowerCase()))
+        .map(i => ({
+          id: uid(),
+          text: i.text,
+          category: i.category || DEFAULT_CATEGORY,
+          weight: i.weight || 2,
+          rating: 0,
+          ratedAt: null,
+          note: '',
+        }))
+      return [...(existing || []), ...fresh]
+    }
+    updateActive(p => ({
+      ...p,
+      green: cloneItems(p.green, source.green),
+      red: cloneItems(p.red, source.red),
+      musthaves: cloneItems(p.musthaves, source.musthaves),
+      dealbreakers: cloneItems(p.dealbreakers, source.dealbreakers),
+    }))
+    setModal(null)
+  }
   const confirmModal = () => {
     if (modal?.type === 'newProfile') {
       const name = modalInput.trim() || `Профил ${state.profiles.length + 1}`
@@ -802,6 +833,14 @@ Output exactly this structure in Bulgarian:
           )
         })}
         <button className="profile-add" onClick={addProfile}>+ Нов</button>
+        <button
+          className="profile-add profile-copy"
+          onClick={openCopyFrom}
+          disabled={state.profiles.length < 2}
+          title={state.profiles.length < 2 ? 'Няма друг профил за копиране' : 'Копирай флаговете от друг профил'}
+        >
+          <Copy size={13} /> Копирай от
+        </button>
       </div>
 
       <div className="tabs">
@@ -1023,6 +1062,30 @@ Output exactly this structure in Bulgarian:
                 </div>
               </Fragment>
             )}
+            {modal.type === 'copyFrom' && (
+              <Fragment>
+                <h3>Копирай флагове в „{active.name}“</h3>
+                <div className="modal-help">
+                  Избери профил — всички зелени и червени флагове (вкл. задължителни и пречки) ще се добавят тук с тяхната тежест. Оценките 1–5 не се копират — попълни ги ръчно за този профил. Повтарящи се текстове се пропускат.
+                </div>
+                <div className="suggest-list">
+                  {state.profiles.filter(p => p.id !== active.id).length === 0 ? (
+                    <div className="empty">Няма друг профил.</div>
+                  ) : (
+                    state.profiles.filter(p => p.id !== active.id).map(p => {
+                      const total = (p.green?.length || 0) + (p.red?.length || 0) + (p.musthaves?.length || 0) + (p.dealbreakers?.length || 0)
+                      return (
+                        <div key={p.id} className="suggest-row">
+                          <span className="suggest-text">{p.name}</span>
+                          <span className="suggest-cat">{total} {total === 1 ? 'флаг' : 'флага'}</span>
+                          <button className="suggest-add sg-green" onClick={() => copyFromProfile(p.id)} title="Копирай от този профил" aria-label="Копирай"><Copy size={14} /></button>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </Fragment>
+            )}
             {modal.type === 'renameProfile' && (
               <Fragment>
                 <h3>Преименувай профил</h3>
@@ -1046,7 +1109,7 @@ Output exactly this structure in Bulgarian:
               </Fragment>
             )}
             <div className="modal-btns">
-              {modal.type === 'suggest' ? (
+              {(modal.type === 'suggest' || modal.type === 'copyFrom') ? (
                 <button className="modal-btn modal-btn-primary" onClick={() => setModal(null)}>Готово</button>
               ) : (
                 <Fragment>
