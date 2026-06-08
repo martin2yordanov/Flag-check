@@ -1085,22 +1085,44 @@
   border-radius: 10px;
 }
 
-/* v3.3 — flag categories + table point-summary footer */
-.cat-section { margin-bottom: 8px; border-radius: 10px; transition: background 0.15s, outline 0.15s; }
-.cat-section.priority-over {
-  background: rgba(108,108,255,0.08);
-  outline: 2px dashed rgba(108,108,255,0.4);
+/* v3.3 / v3.5 — distinct, colour-coded flag categories */
+.cat-section {
+  --cat-color: var(--accent);
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--cat-color);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cat-color) 7%, var(--panel));
+  overflow: hidden;
+  transition: outline 0.15s, box-shadow 0.15s;
+}
+.cat-section.cat-over {
+  outline: 2px dashed var(--cat-color);
   outline-offset: -2px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cat-color) 25%, transparent);
 }
 .cat-head {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 8px 4px;
-  font-size: 10px; font-weight: 700; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.6px;
+  padding: 8px 10px;
+  font-size: 12px; font-weight: 800;
+  letter-spacing: 0.3px;
+  background: color-mix(in srgb, var(--cat-color) 16%, var(--panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--cat-color) 30%, transparent);
 }
-.cat-label { color: var(--text); opacity: 0.85; }
-.cat-count { margin-left: auto; font-weight: 600; }
-.cat-list { padding: 0; min-height: 6px; }
+.cat-icon { font-size: 13px; line-height: 1; }
+.cat-label { color: var(--text); }
+.cat-count {
+  margin-left: auto; font-weight: 700; font-size: 11px;
+  color: var(--cat-color);
+  background: color-mix(in srgb, var(--cat-color) 18%, var(--panel));
+  padding: 2px 8px; border-radius: 10px;
+}
+.cat-list { padding: 4px; min-height: 8px; }
+.cat-list-empty .priority-empty {
+  margin: 2px;
+  border-color: color-mix(in srgb, var(--cat-color) 35%, transparent);
+  color: color-mix(in srgb, var(--cat-color) 60%, var(--muted));
+}
 
 /* Table footer: score guide (left) + total points (right corner) */
 .total-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
