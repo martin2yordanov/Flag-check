@@ -25,7 +25,7 @@ import {
   KeyRound, FileDown, Save, Pencil, Plus, X, ChevronDown, ChevronRight,
   GripVertical, Flag, Sparkles, Brain, Flame, BarChart3, Table as TableIcon,
   BookOpen, GitCompare, Check, AlertTriangle, TrendingUp, TrendingDown,
-  Loader2, CloudOff, CloudCheck, Download, Upload, Trash2, Star, ArrowUpDown, Ban, Copy, Eye, EyeOff,
+  Loader2, CloudOff, CloudCheck, Download, Upload, Trash2, Star, ArrowUpDown, Ban, Copy, Eye, EyeOff, Database,
 } from 'lucide-react'
 import './App.css'
 
@@ -517,12 +517,11 @@ function FlagCheckApp() {
     if (v) setState(s => ({ ...s, profiles: s.profiles.map(p => p.id === id ? { ...p, name: v } : p) }))
     setEditingProfile(null)
   }
-  const toggleCompare = (id) => {
+  const setCompareSlot = (slot, id) => {
     setState(s => {
-      const cur = s.compareIds || []
-      if (cur.includes(id)) return { ...s, compareIds: cur.filter(x => x !== id) }
-      if (cur.length >= 2) return { ...s, compareIds: [cur[1], id] }
-      return { ...s, compareIds: [...cur, id] }
+      const cur = [...(s.compareIds || [])]
+      cur[slot] = id
+      return { ...s, compareIds: cur }
     })
   }
   const deleteProfile = (id) => {
@@ -747,13 +746,10 @@ Output exactly this structure in Bulgarian:
         </h1>
         <div className="header-actions">
           <SyncBadge status={syncStatus} lastSavedAt={lastSavedAt} />
-          <button className="btn-ghost" onClick={renameProfile} title="Преименувай профил" aria-label="Преименувай профил"><Pencil size={16} /></button>
-          <button className="btn-ghost" onClick={setApiKey} title="API ключ" aria-label="API ключ"><KeyRound size={16} /></button>
           <button className="btn-ghost" onClick={exportData} disabled={exporting} title="Експорт в PDF" aria-label="Експорт в PDF">
             {exporting ? <Loader2 size={16} className="spin" /> : <FileDown size={16} />}
           </button>
-          <button className="btn-ghost" onClick={exportJson} title="Запази архив (JSON)" aria-label="Запази архив"><Download size={16} /></button>
-          <button className="btn-ghost" onClick={triggerImport} title="Зареди архив (JSON)" aria-label="Зареди архив"><Upload size={16} /></button>
+          <button className="btn-ghost" onClick={() => setModal({ type: 'data' })} title="Архив (JSON)" aria-label="Архив (JSON)"><Database size={16} /></button>
           <input ref={importInputRef} type="file" accept="application/json,.json" onChange={importJson} style={{ display: 'none' }} />
           <button className="btn-ghost" onClick={snapshot} title="Запис на текущ резултат" aria-label="Запис"><Save size={16} /></button>
           <UserButton afterSignOutUrl="/" />
@@ -774,7 +770,7 @@ Output exactly this structure in Bulgarian:
       )}
 
       {dbBanner && (
-        <div className="banner">
+        <div className="banner banner-db">
           🚩
           <span>
             Активирана пречка: {stats.triggeredDealbreakers.join(', ')}
@@ -821,8 +817,8 @@ Output exactly this structure in Bulgarian:
           return (
             <button
               key={p.id}
-              className={`profile-pill ${p.id === active.id ? 'active' : ''} ${isCompare && tab === 'compare' ? 'compare-sel' : ''}`}
-              onClick={() => tab === 'compare' ? toggleCompare(p.id) : switchProfile(p.id)}
+              className={`profile-pill ${p.id === active.id ? 'active' : ''}`}
+              onClick={() => switchProfile(p.id)}
               onDoubleClick={() => { setProfileDraft(name); setEditingProfile(p.id) }}
               title="Двоен клик за преименуване"
             >
@@ -979,28 +975,52 @@ Output exactly this structure in Bulgarian:
         </section>
       )}
 
-      {tab === 'compare' && (
-        <section className="card">
-          <div className="card-title">Сравни профили</div>
-          <div className="modal-help">
-            Натисни таговете отгоре, за да избереш 2 профила. Избрани: {(state.compareIds || []).length}/2
-          </div>
-          {(state.compareIds || []).length === 2 && (
-            <CompareView
-              a={state.profiles.find(p => p.id === state.compareIds[0])}
-              b={state.profiles.find(p => p.id === state.compareIds[1])}
-            />
-          )}
-        </section>
-      )}
+      {tab === 'compare' && (() => {
+        if (state.profiles.length < 2) {
+          return (
+            <section className="card">
+              <div className="card-title">Сравни профили</div>
+              <div className="empty">Нужни са поне 2 профила за сравнение. Добави още един с „+ Нов“.</div>
+            </section>
+          )
+        }
+        const aId = state.profiles.some(p => p.id === state.compareIds?.[0]) ? state.compareIds[0] : state.profiles[0].id
+        const bId = state.profiles.some(p => p.id === state.compareIds?.[1]) && state.compareIds[1] !== aId
+          ? state.compareIds[1]
+          : (state.profiles.find(p => p.id !== aId)?.id)
+        const a = state.profiles.find(p => p.id === aId)
+        const b = state.profiles.find(p => p.id === bId)
+        return (
+          <section className="card">
+            <div className="card-title">Сравни профили</div>
+            <div className="compare-select-row">
+              <select className="cell-select compare-select" value={aId} onChange={e => setCompareSlot(0, e.target.value)}>
+                {state.profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <span className="compare-vs">срещу</span>
+              <select className="cell-select compare-select" value={bId} onChange={e => setCompareSlot(1, e.target.value)}>
+                {state.profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            {a && b && a.id !== b.id
+              ? <CompareView a={a} b={b} />
+              : <div className="empty">Избери два различни профила.</div>}
+          </section>
+        )
+      })()}
 
       {tab === 'insights' && (
         <section className="card">
-          <div className="card-title">AI анализ · {active.name}</div>
+          <div className="card-title">
+            <span>AI анализ · {active.name}</span>
+            <button className="btn-ghost" onClick={setApiKey} title="API ключ" aria-label="API ключ">
+              <KeyRound size={14} /> {state.apiKey ? 'Смени API ключ' : 'Добави API ключ'}
+            </button>
+          </div>
           <div className="modal-help">
             {state.apiKey
               ? 'Изпраща текущия профил към Claude за анализ. Брутално директен изход.'
-              : 'Нужен е Anthropic API ключ. Натисни 🔑 в хедъра, за да добавиш. Вземи ключ от console.anthropic.com.'}
+              : 'Нужен е Anthropic API ключ. Натисни „Добави API ключ“ горе вдясно. Вземи ключ от console.anthropic.com.'}
           </div>
           <button className="insight-btn" onClick={runInsight} disabled={insight.loading}>
             {insight.loading ? 'Анализирам…' : '🧠 Стартирай анализ'}
@@ -1042,6 +1062,20 @@ Output exactly this structure in Bulgarian:
                   autoFocus
                   onKeyDown={e => { if (e.key === 'Enter') confirmModal() }}
                 />
+              </Fragment>
+            )}
+            {modal.type === 'data' && (
+              <Fragment>
+                <h3>Архив (JSON)</h3>
+                <div className="modal-help">Запази всичките си профили във файл или зареди от предишен архив.</div>
+                <div className="data-actions">
+                  <button className="data-btn" onClick={() => { setModal(null); exportJson() }}>
+                    <Download size={16} /> Запази архив
+                  </button>
+                  <button className="data-btn" onClick={() => { setModal(null); triggerImport() }}>
+                    <Upload size={16} /> Зареди архив
+                  </button>
+                </div>
               </Fragment>
             )}
             {modal.type === 'suggest' && (
@@ -1109,7 +1143,7 @@ Output exactly this structure in Bulgarian:
               </Fragment>
             )}
             <div className="modal-btns">
-              {(modal.type === 'suggest' || modal.type === 'copyFrom') ? (
+              {(modal.type === 'suggest' || modal.type === 'copyFrom' || modal.type === 'data') ? (
                 <button className="modal-btn modal-btn-primary" onClick={() => setModal(null)}>Готово</button>
               ) : (
                 <Fragment>
