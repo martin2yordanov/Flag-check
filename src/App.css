@@ -97,6 +97,12 @@
   color: var(--text);
   font-size: 14px;
 }
+.profile-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.profile-copy:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .tabs {
   display: flex;
