@@ -40,10 +40,11 @@ const today = () => new Date().toISOString().slice(0,10)
 
 const LISTS = ['green', 'red', 'musthaves', 'dealbreakers']
 const CATEGORIES = [
-  { id: 'sex', label: 'Секс' },
-  { id: 'eq', label: 'Емоционална интелигентност' },
-  { id: 'friendship', label: 'Приятелство' },
-  { id: 'personal', label: 'Личен живот' },
+  { id: 'sex', label: 'Секс', color: '#ff5d8f', icon: '🔥' },
+  { id: 'eq', label: 'Емоционална интелигентност', color: '#579bfc', icon: '🧠' },
+  { id: 'friendship', label: 'Приятелство', color: '#fdab3d', icon: '🤝' },
+  { id: 'qualities', label: 'Лични качества', color: '#00c875', icon: '⭐' },
+  { id: 'personal', label: 'Личен живот', color: '#a25ddc', icon: '🏠' },
 ]
 const CATEGORY_IDS = CATEGORIES.map(c => c.id)
 const DEFAULT_CATEGORY = 'personal'
@@ -1012,6 +1013,7 @@ function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, banner
         {CATEGORIES.map(cat => (
           <CategorySection
             key={cat.id} which={which} accent={accent} catId={cat.id} label={cat.label}
+            color={cat.color} icon={cat.icon}
             items={columnItems.filter(i => i.category === cat.id)} activeId={activeId}
             onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
           />
@@ -1055,15 +1057,17 @@ function BannerZone({ accent, zone, title, Icon, items, onRate, onRemove, onUpda
   )
 }
 
-function CategorySection({ which, accent, catId, label, items, activeId, onRate, onRemove, onUpdate }) {
+function CategorySection({ which, accent, catId, label, color, icon, items, activeId, onRate, onRemove, onUpdate }) {
   const { setNodeRef, isOver } = useDroppable({ id: `zone:${which}:${catId}` })
+  const rated = items.filter(i => i.rating > 0).length
   return (
-    <div className={`cat-section ${isOver ? 'priority-over' : ''}`}>
+    <div className={`cat-section ${isOver ? 'cat-over' : ''}`} style={{ '--cat-color': color }}>
       <div className="cat-head">
+        <span className="cat-icon" aria-hidden>{icon}</span>
         <span className="cat-label">{label}</span>
-        <span className="cat-count">{items.length}</span>
+        <span className="cat-count">{rated}/{items.length}</span>
       </div>
-      <ul ref={setNodeRef} className={`list cat-list ${items.length === 0 ? 'priority-list-empty' : ''}`}>
+      <ul ref={setNodeRef} className={`list cat-list ${items.length === 0 ? 'cat-list-empty' : ''}`}>
         {items.length === 0 ? (
           <li className="priority-empty">Пусни тук</li>
         ) : (
