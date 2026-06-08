@@ -8,10 +8,17 @@ import {
   useSensor,
   useSensors,
   pointerWithin,
+  closestCenter,
   useDraggable,
   useDroppable,
   DragOverlay,
 } from '@dnd-kit/core'
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
   KeyRound, FileDown, Save, Pencil, Plus, X, ChevronDown, ChevronRight,
@@ -40,6 +47,22 @@ const CATEGORIES = [
 ]
 const CATEGORY_IDS = CATEGORIES.map(c => c.id)
 const DEFAULT_CATEGORY = 'personal'
+
+// Default left→right order of the editable table's columns (notes last).
+const TABLE_COL_IDS = ['actions', 'color', 'name', 'rating', 'weight', 'points', 'note']
+const COL_ORDER_KEY = 'flag-check-table-cols'
+const loadColOrder = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(COL_ORDER_KEY))
+    if (Array.isArray(saved)) {
+      const valid = saved.filter(id => TABLE_COL_IDS.includes(id))
+      const missing = TABLE_COL_IDS.filter(id => !valid.includes(id))
+      return [...valid, ...missing]
+    }
+  } catch {}
+  return TABLE_COL_IDS
+}
+const saveColOrder = (o) => { try { localStorage.setItem(COL_ORDER_KEY, JSON.stringify(o)) } catch {} }
 const newItem = (text) => ({
   id: uid(), text, rating: 0, weight: 2, category: DEFAULT_CATEGORY, note: '', ratedAt: null,
 })
@@ -1304,6 +1327,77 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
   const tExc = Math.round(stats.gMax * 0.70)
   const toggleSort = (key) => setSort(s => s.key === key ? { key, dir: -s.dir } : { key, dir: 1 })
 
+  const [colOrder, setColOrder] = useState(loadColOrder)
+  const colSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor),
+  )
+  const onColDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return
+    setColOrder(prev => {
+      const next = arrayMove(prev, prev.indexOf(active.id), prev.indexOf(over.id))
+      saveColOrder(next)
+      return next
+    })
+  }
+
+  // Column definitions: header meta + per-row cell renderer. Order is driven by colOrder.
+  const COLS = {
+    actions: {
+      cls: 'th-actions', label: '',
+      cell: (item) => (
+        <td className="td-actions" key="actions">
+          <button className="row-del" onClick={() => { if (confirm(`Изтрий „${item.text}“?`)) onRemove(item.id) }} title="Изтрий" aria-label="Изтрий"><X size={13} /></button>
+        </td>
+      ),
+    },
+    color: {
+      cls: 'th-color', label: '', sortKey: 'color',
+      cell: (item) => (
+        <td className="td-color" key="color">
+          <span className={`color-pill color-${item.color}`} title={item.color === 'green' ? 'Зелен флаг' : 'Червен флаг'}>
+            {item.kind === 'dealbreaker' ? <Ban size={11} /> : item.kind === 'musthave' ? <Star size={11} /> : <Flag size={11} fill={item.color === 'green' ? 'var(--green)' : 'var(--red)'} stroke="none" />}
+          </span>
+        </td>
+      ),
+    },
+    name: {
+      label: 'Флаг', sortKey: 'name',
+      cell: (item) => (
+        <td key="name">
+          <input className="cell-input flag-name-input" type="text" value={item.text} onChange={e => onUpdate(item.id, { text: e.target.value })} />
+        </td>
+      ),
+    },
+    rating: {
+      cls: 'th-rating', label: 'Оценка', sortKey: 'rating',
+      cell: (item) => (
+        <td className="td-rating" key="rating"><CellSegs accent={item.color} value={item.rating} onChange={(n) => onRate(item.id, n)} /></td>
+      ),
+    },
+    weight: {
+      cls: 'th-weight', label: 'Тежест', sortKey: 'weight',
+      cell: (item) => (
+        <td className="td-weight" key="weight"><CellSegs accent="neutral" count={3} value={item.weight || 2} onChange={(n) => onUpdate(item.id, { weight: n })} /></td>
+      ),
+    },
+    points: {
+      cls: 'th-points', label: 'Точки', sortKey: 'points',
+      cell: (item) => (
+        <td className={`td-points td-points-${item.color}`} key="points">{item.color === 'red' ? '−' : '+'}{itemScore(item)}</td>
+      ),
+    },
+    note: {
+      label: 'Бележки',
+      cell: (item) => (
+        <td className="td-note" key="note">
+          <input className="cell-input note-inline" type="text" placeholder="—" value={item.note || ''} onChange={e => onUpdate(item.id, { note: e.target.value })} />
+        </td>
+      ),
+    },
+  }
+  const orderedIds = colOrder.filter(id => COLS[id])
+
   if (rows.length === 0) {
     return (
       <section className="card">
@@ -1313,83 +1407,76 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
     )
   }
 
-  const SortTh = ({ k, label, cls }) => (
-    <th className={`${cls || ''} sortable ${sort.key === k ? 'sorted' : ''}`} onClick={() => toggleSort(k)}>
-      {label} <ArrowUpDown size={11} className="sort-icon" />
-    </th>
-  )
-
   return (
     <section className="card">
       <div className="card-title">
         <span>{profile.name} · Таблица на флаговете</span>
         <span style={{ color: 'var(--muted)', fontSize: 11, textTransform: 'none', letterSpacing: 0 }}>
-          {rows.length} {rows.length === 1 ? 'флаг' : 'флага'}
+          {rows.length} {rows.length === 1 ? 'флаг' : 'флага'} · влачи заглавие за разместване
         </span>
       </div>
       <div className="flags-table-wrap">
         <table className="flags-table editable">
           <thead>
-            <tr>
-              <th className="th-actions" />
-              <SortTh k="color" label="" cls="th-color" />
-              <SortTh k="name" label="Флаг" />
-              <SortTh k="rating" label="Оценка" cls="th-rating" />
-              <SortTh k="weight" label="Тежест" cls="th-weight" />
-              <th>Бележки</th>
-              <SortTh k="points" label="Точки" cls="th-points" />
-            </tr>
+            <DndContext sensors={colSensors} collisionDetection={closestCenter} onDragEnd={onColDragEnd}>
+              <SortableContext items={orderedIds} strategy={horizontalListSortingStrategy}>
+                <tr>
+                  {orderedIds.map(id => (
+                    <ColumnHeader key={id} id={id} col={COLS[id]} sort={sort} toggleSort={toggleSort} />
+                  ))}
+                </tr>
+              </SortableContext>
+            </DndContext>
           </thead>
           <tbody>
             {rows.map(item => (
               <tr key={`${item.color}-${item.id}`} className={`tr-${item.color}`}>
-                <td className="td-actions">
-                  <button className="row-del" onClick={() => { if (confirm(`Изтрий „${item.text}“?`)) onRemove(item.id) }} title="Изтрий" aria-label="Изтрий"><X size={13} /></button>
-                </td>
-                <td className="td-color">
-                  <span className={`color-pill color-${item.color}`} title={item.color === 'green' ? 'Зелен флаг' : 'Червен флаг'}>
-                    {item.kind === 'dealbreaker' ? <Ban size={11} /> : item.kind === 'musthave' ? <Star size={11} /> : <Flag size={11} fill={item.color === 'green' ? 'var(--green)' : 'var(--red)'} stroke="none" />}
-                  </span>
-                </td>
-                <td>
-                  <input
-                    className="cell-input flag-name-input" type="text" value={item.text}
-                    onChange={e => onUpdate(item.id, { text: e.target.value })}
-                  />
-                </td>
-                <td className="td-rating">
-                  <CellSegs accent={item.color} value={item.rating} onChange={(n) => onRate(item.id, n)} />
-                </td>
-                <td className="td-weight">
-                  <CellSegs accent="neutral" count={3} value={item.weight || 2} onChange={(n) => onUpdate(item.id, { weight: n })} />
-                </td>
-                <td className="td-note">
-                  <input
-                    className="cell-input note-inline" type="text" placeholder="—"
-                    value={item.note || ''} onChange={e => onUpdate(item.id, { note: e.target.value })}
-                  />
-                </td>
-                <td className={`td-points td-points-${item.color}`}>{item.color === 'red' ? '−' : '+'}{itemScore(item)}</td>
+                {orderedIds.map(id => COLS[id].cell(item))}
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="table-total">
-              <td colSpan={5} className="score-guide-cell">
-                <div className="score-guide">
-                  <span className="guide-item guide-avg">Среден ≥ {tAvg}</span>
-                  <span className="guide-item guide-good">Добър ≥ {tGood}</span>
-                  <span className="guide-item guide-exc">Отличен ≥ {tExc}</span>
-                  <span className="guide-max">точки · макс +{stats.gMax}</span>
+              <td colSpan={orderedIds.length}>
+                <div className="total-bar">
+                  <div className="score-guide">
+                    <span className="guide-item guide-avg">Среден ≥ {tAvg}</span>
+                    <span className="guide-item guide-good">Добър ≥ {tGood}</span>
+                    <span className="guide-item guide-exc">Отличен ≥ {tExc}</span>
+                    <span className="guide-max">макс +{stats.gMax}</span>
+                  </div>
+                  <div className="total-right">
+                    <span className="total-label">Общо точки</span>
+                    <span className={`total-points ${net >= tExc ? 'lvl-exc' : net >= tGood ? 'lvl-good' : net >= tAvg ? 'lvl-avg' : 'lvl-low'}`}>{net}</span>
+                  </div>
                 </div>
               </td>
-              <td className="total-label">Общо точки</td>
-              <td className={`td-points total-points ${net >= tExc ? 'lvl-exc' : net >= tGood ? 'lvl-good' : net >= tAvg ? 'lvl-avg' : 'lvl-low'}`}>{net}</td>
             </tr>
           </tfoot>
         </table>
       </div>
     </section>
+  )
+}
+
+function ColumnHeader({ id, col, sort, toggleSort }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  }
+  return (
+    <th ref={setNodeRef} style={style} className={`${col.cls || ''} draggable-col ${col.sortKey && sort.key === col.sortKey ? 'sorted' : ''}`}>
+      <span className="th-inner">
+        <button className="col-grip" {...attributes} {...listeners} title="Влачи за разместване" aria-label="Размести колона"><GripVertical size={12} /></button>
+        {col.sortKey ? (
+          <span className="th-sort" onClick={() => toggleSort(col.sortKey)}>{col.label}<ArrowUpDown size={11} className="sort-icon" /></span>
+        ) : (
+          <span>{col.label}</span>
+        )}
+      </span>
+    </th>
   )
 }
 
