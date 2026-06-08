@@ -1184,3 +1184,17 @@
 .add-btn-suggest:active { background: var(--panel-3); }
 .add-suggest-green { color: var(--green); }
 .add-suggest-red { color: var(--red); }
+
+/* v3.8 — inline profile rename (double-click a profile pill) */
+.profile-edit {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 20px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+  outline: none;
+  width: 140px;
+}

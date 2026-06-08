@@ -131,7 +131,8 @@ const normalizeItem = (i) => {
 
 function normalizeState(p) {
   if (!p || !p.profiles?.length) return null
-  p.profiles.forEach(pr => {
+  p.profiles.forEach((pr, idx) => {
+    pr.name = (pr.name && pr.name.trim()) ? pr.name : `Профил ${idx + 1}`
     pr.green = (pr.green || []).map(normalizeItem)
     pr.red = (pr.red || []).map(normalizeItem)
     pr.musthaves = (pr.musthaves || []).map(normalizeItem)
@@ -283,6 +284,8 @@ function FlagCheckApp() {
   const [newRed, setNewRed] = useState('')
   const [modal, setModal] = useState(null)
   const [modalInput, setModalInput] = useState('')
+  const [editingProfile, setEditingProfile] = useState(null)
+  const [profileDraft, setProfileDraft] = useState('')
   const [bannerDismissed, setBannerDismissed] = useState(false)
   const [insight, setInsight] = useState({ loading: false, text: '', error: '' })
   const [journalText, setJournalText] = useState('')
@@ -477,6 +480,11 @@ function FlagCheckApp() {
     setModal(null)
   }
   const switchProfile = (id) => setState(s => ({ ...s, activeId: id }))
+  const commitProfileName = (id) => {
+    const v = profileDraft.trim()
+    if (v) setState(s => ({ ...s, profiles: s.profiles.map(p => p.id === id ? { ...p, name: v } : p) }))
+    setEditingProfile(null)
+  }
   const toggleCompare = (id) => {
     setState(s => {
       const cur = s.compareIds || []
@@ -757,17 +765,36 @@ Output exactly this structure in Bulgarian:
       )}
 
       <div className="profile-bar">
-        {state.profiles.map(p => {
+        {state.profiles.map((p, idx) => {
           const ps = computeStats(p)
           const tr = trendFor(p)
           const isCompare = (state.compareIds || []).includes(p.id)
+          const name = p.name || `Профил ${idx + 1}`
+          if (editingProfile === p.id) {
+            return (
+              <input
+                key={p.id}
+                className="profile-edit"
+                autoFocus
+                value={profileDraft}
+                onChange={e => setProfileDraft(e.target.value)}
+                onBlur={() => commitProfileName(p.id)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') commitProfileName(p.id)
+                  if (e.key === 'Escape') setEditingProfile(null)
+                }}
+              />
+            )
+          }
           return (
             <button
               key={p.id}
               className={`profile-pill ${p.id === active.id ? 'active' : ''} ${isCompare && tab === 'compare' ? 'compare-sel' : ''}`}
               onClick={() => tab === 'compare' ? toggleCompare(p.id) : switchProfile(p.id)}
+              onDoubleClick={() => { setProfileDraft(name); setEditingProfile(p.id) }}
+              title="Двоен клик за преименуване"
             >
-              {p.name}
+              {name}
               <span className="pct"> {ps.compat}%</span>
               {tr && <span className={`trend ${tr.dir}`}>{tr.dir === 'up' ? '↑' : '↓'}</span>}
             </button>
