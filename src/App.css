@@ -1103,9 +1103,9 @@
 .cat-list { padding: 0; min-height: 6px; }
 
 /* Table footer: score guide (left) + total points (right corner) */
-.score-guide-cell { vertical-align: middle; }
+.total-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .score-guide {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   font-size: 12px; font-weight: 600;
 }
 .guide-item { padding: 2px 8px; border-radius: 12px; background: var(--panel-2); }
@@ -1113,11 +1113,24 @@
 .guide-good { color: var(--yellow); }
 .guide-exc { color: var(--green); }
 .guide-max { color: var(--muted); font-weight: 500; }
-.total-label { text-align: right; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-size: 11px; white-space: nowrap; }
-.total-points { font-size: 18px; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+.total-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.total-label { font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-size: 11px; white-space: nowrap; }
+.total-points { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .total-points.lvl-exc { color: var(--green); }
 .total-points.lvl-good { color: var(--yellow); }
 .total-points.lvl-avg { color: var(--text); }
 .total-points.lvl-low { color: var(--red); }
 .td-points-green { color: var(--green); font-weight: 700; }
 .td-points-red { color: var(--red); font-weight: 700; }
+
+/* v3.4 — reorderable table columns */
+.draggable-col .th-inner { display: inline-flex; align-items: center; gap: 4px; }
+.col-grip {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--muted); opacity: 0.4; cursor: grab; touch-action: none;
+  padding: 2px; border-radius: 4px;
+}
+.col-grip:hover { opacity: 1; background: var(--panel-2); }
+.col-grip:active { cursor: grabbing; }
+.th-sort { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; user-select: none; }
+.th-sort:hover { color: var(--text); }
