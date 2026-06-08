@@ -41,7 +41,7 @@ const CATEGORIES = [
 const CATEGORY_IDS = CATEGORIES.map(c => c.id)
 const DEFAULT_CATEGORY = 'personal'
 const newItem = (text) => ({
-  id: uid(), text, rating: 0, weight: 3, category: DEFAULT_CATEGORY, note: '', ratedAt: null,
+  id: uid(), text, rating: 0, weight: 2, category: DEFAULT_CATEGORY, note: '', ratedAt: null,
 })
 const makeItems = (texts) => texts.map(newItem)
 
@@ -60,8 +60,9 @@ const normalizeItem = (i) => {
     ? i.rating
     : (i.checked ? 3 : 0)
   const ratedAt = i.ratedAt ?? i.checkedAt ?? null
-  // Per-item numeric weight 1-5 is the only importance signal now.
-  const weight = (typeof i.weight === 'number' && i.weight >= 1 && i.weight <= 5) ? i.weight : 3
+  // Per-item numeric weight 1-3 is the only importance signal now.
+  // Clamp legacy values (old 1-5 scale) into the new 1-3 range so prior data keeps its high-importance intent.
+  const weight = typeof i.weight === 'number' ? Math.min(3, Math.max(1, Math.round(i.weight))) : 2
   const category = CATEGORY_IDS.includes(i.category) ? i.category : DEFAULT_CATEGORY
   return {
     note: '',
@@ -118,9 +119,9 @@ function loadLocal(userId) {
   return defaultState()
 }
 
-// Each flag contributes rating × per-item weight (1-5).
-const itemScore = (i) => i.rating * (i.weight || 3)
-const itemMax = (i) => 5 * (i.weight || 3)
+// Each flag contributes rating × per-item weight (1-3).
+const itemScore = (i) => i.rating * (i.weight || 2)
+const itemMax = (i) => 5 * (i.weight || 2)
 
 function computeStats(profile) {
   const g = [...(profile.green || []), ...(profile.musthaves || [])]
@@ -541,7 +542,7 @@ function FlagCheckApp() {
 
 Subject: ${active.name}
 Compatibility: ${stats.compat}% (green ${stats.greenPct}%, red ${stats.redPct}%)
-Each flag is rated 1-5 (intensity) and has a numeric weight 1-5. Score contribution = rating × weight.
+Each flag is rated 1-5 (intensity) and has a numeric weight 1-3. Score contribution = rating × weight.
 Must-haves are required green traits; unmet ones are serious. Dealbreakers are red traits that end it if present.
 
 Must-haves: ${musthaves.join('; ') || 'none'}
@@ -706,7 +707,7 @@ Output exactly this structure in Bulgarian:
             <div className="score-breakdown-formula">
               Съвместимост = зелено − червено = {stats.greenPct}% − {stats.redPct}% = <strong>{stats.compat}%</strong>
             </div>
-            <div className="score-breakdown-note">Точки = оценка (1–5) × тежест (1–5).</div>
+            <div className="score-breakdown-note">Точки = оценка (1–5) × тежест (1–3).</div>
           </div>
           <div className={`verdict ${verdict.cls}`}>{verdict.text}</div>
           <details className="verdict-legend card">
@@ -1119,11 +1120,11 @@ function SortableRow({ item, accent, which, special, onRate, onRemove, onUpdate,
 
 function WeightPicker({ value, onChange }) {
   return (
-    <div className="weight-picker" role="radiogroup" aria-label="Тежест 1-5" title="Тежест 1–5">
-      {[1,2,3,4,5].map(n => (
+    <div className="weight-picker" role="radiogroup" aria-label="Тежест 1-3" title="Тежест 1–3">
+      {[1,2,3].map(n => (
         <button
           key={n} type="button"
-          className={`weight-seg ${n <= (value || 3) ? 'on' : ''}`}
+          className={`weight-seg ${n <= (value || 2) ? 'on' : ''}`}
           onClick={() => onChange(n)}
           title={`Тежест ${n}`} aria-label={`Тежест ${n}`}
         >{n}</button>
@@ -1285,7 +1286,7 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
       default: (a, b) => (a.color === b.color ? (itemScore(b) - itemScore(a)) : (a.color === 'green' ? -1 : 1)),
       name: (a, b) => a.text.localeCompare(b.text, 'bg'),
       rating: (a, b) => a.rating - b.rating,
-      weight: (a, b) => (a.weight || 3) - (b.weight || 3),
+      weight: (a, b) => (a.weight || 2) - (b.weight || 2),
       points: (a, b) => itemScore(a) - itemScore(b),
       color: (a, b) => (a.color === 'green' ? -1 : 1),
     }
@@ -1360,7 +1361,7 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
                   <CellSegs accent={item.color} value={item.rating} onChange={(n) => onRate(item.id, n)} />
                 </td>
                 <td className="td-weight">
-                  <CellSegs accent="neutral" value={item.weight || 3} onChange={(n) => onUpdate(item.id, { weight: n })} />
+                  <CellSegs accent="neutral" count={3} value={item.weight || 2} onChange={(n) => onUpdate(item.id, { weight: n })} />
                 </td>
                 <td className="td-note">
                   <input
@@ -1392,15 +1393,15 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
   )
 }
 
-function CellSegs({ accent, value, onChange }) {
+function CellSegs({ accent, value, onChange, count = 5 }) {
   return (
     <div className={`cell-segs cell-segs-${accent}`} role="radiogroup">
-      {[1,2,3,4,5].map(n => (
+      {Array.from({ length: count }, (_, idx) => idx + 1).map(n => (
         <button
           key={n} type="button"
           className={`cell-seg ${n <= value ? 'on' : ''}`}
           onClick={() => onChange(n === value ? (accent === 'neutral' ? n : 0) : n)}
-          title={`${n}/5`} aria-label={`${n}/5`}
+          title={`${n}/${count}`} aria-label={`${n}/${count}`}
         />
       ))}
     </div>
@@ -1423,7 +1424,7 @@ function PdfReport({ profile, stats, verdict }) {
         {item.rating > 0 ? `${item.rating}/5` : '—'}
       </td>
       <td style={{ padding: '6px 8px', borderBottom: '1px solid #2a2a2e', textAlign: 'center', color: '#a0a0a8' }}>
-        {item.weight || 3}
+        {item.weight || 2}
       </td>
       <td style={{ padding: '6px 8px', borderBottom: '1px solid #2a2a2e', color: '#a0a0a8', fontSize: 11 }}>
         {item.note || '—'}
@@ -1499,7 +1500,7 @@ function PdfReport({ profile, stats, verdict }) {
       )}
 
       <div style={{ marginTop: 24, paddingTop: 12, borderTop: '1px solid #2a2a2e', fontSize: 10, color: '#7a7a82' }}>
-        Поверително · поколение от Flag Check · точки = оценка (1–5) × тежест (1–5)
+        Поверително · поколение от Flag Check · точки = оценка (1–5) × тежест (1–3)
       </div>
     </div>
   )
