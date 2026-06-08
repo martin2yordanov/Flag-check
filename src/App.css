@@ -1178,3 +1178,9 @@
 .suggest-add.sg-green { background: var(--green); }
 .suggest-add.sg-red { background: var(--red); }
 .suggest-add:disabled { background: var(--panel-3); color: var(--muted); }
+
+/* v3.7 — per-column suggest button next to the add (+) button */
+.add-btn-suggest { background: var(--panel-2); color: var(--accent); border: 1px solid var(--border); }
+.add-btn-suggest:active { background: var(--panel-3); }
+.add-suggest-green { color: var(--green); }
+.add-suggest-red { color: var(--red); }
