@@ -1198,3 +1198,48 @@
   outline: none;
   width: 140px;
 }
+
+/* v3.9 — table overhaul: banner header, row drag, footer */
+.table-banner {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+.table-banner-title { font-size: 14px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; }
+.table-count {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.6px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  padding: 3px 9px; border-radius: 12px;
+}
+.table-toggle {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; color: var(--text);
+  background: var(--panel-2); border: 1px solid var(--border);
+  padding: 7px 12px; border-radius: 8px; white-space: nowrap;
+}
+.table-toggle:active { background: var(--panel-3); }
+
+/* Points cell with drag grip */
+.points-cell { display: inline-flex; align-items: center; gap: 6px; justify-content: center; }
+.row-grip {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--muted); opacity: 0.45; cursor: grab; touch-action: none;
+  padding: 2px; border-radius: 4px;
+}
+.row-grip:hover { opacity: 1; background: var(--panel-2); }
+.row-grip:active { cursor: grabbing; }
+
+/* Points font bumped up one step */
+.flags-table .td-points { font-size: 14px; }
+
+/* Footer total + breakdown sub-line */
+.total-line { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.total-points { font-size: 21px; }
+.total-sub { font-size: 12px; color: var(--muted); text-align: right; margin-top: 2px; font-weight: 600; }
