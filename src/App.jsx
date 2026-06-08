@@ -32,8 +32,16 @@ const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2,8)}`
 const today = () => new Date().toISOString().slice(0,10)
 
 const LISTS = ['green', 'red', 'musthaves', 'dealbreakers']
+const CATEGORIES = [
+  { id: 'sex', label: 'Секс' },
+  { id: 'eq', label: 'Емоционална интелигентност' },
+  { id: 'friendship', label: 'Приятелство' },
+  { id: 'personal', label: 'Личен живот' },
+]
+const CATEGORY_IDS = CATEGORIES.map(c => c.id)
+const DEFAULT_CATEGORY = 'personal'
 const newItem = (text) => ({
-  id: uid(), text, rating: 0, weight: 3, note: '', ratedAt: null,
+  id: uid(), text, rating: 0, weight: 3, category: DEFAULT_CATEGORY, note: '', ratedAt: null,
 })
 const makeItems = (texts) => texts.map(newItem)
 
@@ -54,12 +62,14 @@ const normalizeItem = (i) => {
   const ratedAt = i.ratedAt ?? i.checkedAt ?? null
   // Per-item numeric weight 1-5 is the only importance signal now.
   const weight = (typeof i.weight === 'number' && i.weight >= 1 && i.weight <= 5) ? i.weight : 3
+  const category = CATEGORY_IDS.includes(i.category) ? i.category : DEFAULT_CATEGORY
   return {
     note: '',
     ...i,
     rating,
     ratedAt,
     weight,
+    category,
   }
 }
 
@@ -314,8 +324,9 @@ function FlagCheckApp() {
     for (const k of LISTS) np[k] = (p[k] || []).filter(it => it.id !== id)
     return np
   })
-  // Move an item to another list (used by drag-and-drop between columns and top banners).
-  const moveItem = (id, toListKey, patch = {}) => updateActive(p => {
+  // Drag-and-drop relocate: move an item to another list/category and optionally
+  // insert it before a given item (enables reordering within a list/category).
+  const moveItem = (id, toListKey, { category, beforeId } = {}) => updateActive(p => {
     let moved = null
     const np = {}
     for (const k of LISTS) {
@@ -325,7 +336,12 @@ function FlagCheckApp() {
         else np[k].push(it)
       }
     }
-    if (moved) np[toListKey] = [...np[toListKey], { ...moved, ...patch }]
+    if (!moved) return p
+    if (category) moved = { ...moved, category }
+    const target = np[toListKey]
+    const idx = beforeId ? target.findIndex(it => it.id === beforeId) : -1
+    if (idx >= 0) target.splice(idx, 0, moved)
+    else target.push(moved)
     return { ...p, ...np }
   })
   const addItem = (which, text, setText) => {
@@ -894,15 +910,27 @@ function Board({ profile, onRate, onRemove, onUpdate, onMove, newGreen, setNewGr
     const fromList = findList(draggedId)
     if (!fromList) return
     const overId = String(over.id)
+    if (overId === draggedId) return
 
-    // Resolve the drop target list: a zone (zone:green/red/musthaves/dealbreakers)
-    // or another item (→ that item's list).
-    let toList = null
-    if (overId.startsWith('zone:')) toList = overId.slice(5)
-    else toList = findList(overId)
+    // Resolve the drop target into { list, category?, beforeId? }.
+    // Zones: zone:musthaves | zone:dealbreakers | zone:<color>:<categoryId>.
+    // Dropping onto an item inserts before it (reordering / cross-category).
+    let toList = null, category = null, beforeId = null
+    if (overId.startsWith('zone:')) {
+      const parts = overId.split(':')
+      toList = parts[1]
+      if (parts[2]) category = parts[2]
+    } else {
+      const overList = findList(overId)
+      if (!overList) return
+      toList = overList
+      const overItem = (profile[overList] || []).find(i => i.id === overId)
+      category = overItem?.category || null
+      beforeId = overId
+    }
     if (!toList || !LISTS.includes(toList)) return
 
-    if (toList !== fromList) onMove(draggedId, toList)
+    onMove(draggedId, toList, { category, beforeId })
   }
 
   return (
@@ -957,11 +985,13 @@ function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, banner
           {columnTitle}
           <span className="count">{columnItems.filter(i => i.rating > 0).length}/{columnItems.length}</span>
         </h2>
-        <DropList
-          zone={which} accent={accent} items={columnItems} activeId={activeId}
-          emptyHint="Пусни флаг тук или добави отдолу ↓"
-          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
-        />
+        {CATEGORIES.map(cat => (
+          <CategorySection
+            key={cat.id} which={which} accent={accent} catId={cat.id} label={cat.label}
+            items={columnItems.filter(i => i.category === cat.id)} activeId={activeId}
+            onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
+          />
+        ))}
         <div className="add-row">
           <input
             type="text" placeholder="Добави нов флаг…" value={newValue}
@@ -1001,22 +1031,28 @@ function BannerZone({ accent, zone, title, Icon, items, onRate, onRemove, onUpda
   )
 }
 
-function DropList({ zone, accent, items, activeId, emptyHint, onRate, onRemove, onUpdate }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `zone:${zone}` })
+function CategorySection({ which, accent, catId, label, items, activeId, onRate, onRemove, onUpdate }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `zone:${which}:${catId}` })
   return (
-    <ul ref={setNodeRef} className={`list drop-list ${isOver ? 'priority-over' : ''} ${items.length === 0 ? 'priority-list-empty' : ''}`}>
-      {items.length === 0 ? (
-        <li className="priority-empty">{emptyHint}</li>
-      ) : (
-        items.map(item => (
-          <SortableRow
-            key={item.id} item={item} accent={accent} which={zone}
-            onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
-            isDragging={activeId === item.id}
-          />
-        ))
-      )}
-    </ul>
+    <div className={`cat-section ${isOver ? 'priority-over' : ''}`}>
+      <div className="cat-head">
+        <span className="cat-label">{label}</span>
+        <span className="cat-count">{items.length}</span>
+      </div>
+      <ul ref={setNodeRef} className={`list cat-list ${items.length === 0 ? 'priority-list-empty' : ''}`}>
+        {items.length === 0 ? (
+          <li className="priority-empty">Пусни тук</li>
+        ) : (
+          items.map(item => (
+            <SortableRow
+              key={item.id} item={item} accent={accent} which={`${which}:${catId}`}
+              onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
+              isDragging={activeId === item.id}
+            />
+          ))
+        )}
+      </ul>
+    </div>
   )
 }
 
@@ -1259,6 +1295,12 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
   }, [profile, sort])
 
   const stats = computeStats(profile)
+  // This page's logic is pure point-summing: total = green points − red points.
+  const net = stats.gScore - stats.rScore
+  // Bands as a share of the max attainable positive score (gMax).
+  const tAvg = Math.round(stats.gMax * 0.20)
+  const tGood = Math.round(stats.gMax * 0.45)
+  const tExc = Math.round(stats.gMax * 0.70)
   const toggleSort = (key) => setSort(s => s.key === key ? { key, dir: -s.dir } : { key, dir: 1 })
 
   if (rows.length === 0) {
@@ -1288,18 +1330,21 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
         <table className="flags-table editable">
           <thead>
             <tr>
+              <th className="th-actions" />
               <SortTh k="color" label="" cls="th-color" />
               <SortTh k="name" label="Флаг" />
               <SortTh k="rating" label="Оценка" cls="th-rating" />
               <SortTh k="weight" label="Тежест" cls="th-weight" />
-              <SortTh k="points" label="Точки" cls="th-points" />
               <th>Бележки</th>
-              <th className="th-actions" />
+              <SortTh k="points" label="Точки" cls="th-points" />
             </tr>
           </thead>
           <tbody>
             {rows.map(item => (
               <tr key={`${item.color}-${item.id}`} className={`tr-${item.color}`}>
+                <td className="td-actions">
+                  <button className="row-del" onClick={() => { if (confirm(`Изтрий „${item.text}“?`)) onRemove(item.id) }} title="Изтрий" aria-label="Изтрий"><X size={13} /></button>
+                </td>
                 <td className="td-color">
                   <span className={`color-pill color-${item.color}`} title={item.color === 'green' ? 'Зелен флаг' : 'Червен флаг'}>
                     {item.kind === 'dealbreaker' ? <Ban size={11} /> : item.kind === 'musthave' ? <Star size={11} /> : <Flag size={11} fill={item.color === 'green' ? 'var(--green)' : 'var(--red)'} stroke="none" />}
@@ -1317,30 +1362,28 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
                 <td className="td-weight">
                   <CellSegs accent="neutral" value={item.weight || 3} onChange={(n) => onUpdate(item.id, { weight: n })} />
                 </td>
-                <td className="td-points">{itemScore(item)}</td>
                 <td className="td-note">
                   <input
                     className="cell-input note-inline" type="text" placeholder="—"
                     value={item.note || ''} onChange={e => onUpdate(item.id, { note: e.target.value })}
                   />
                 </td>
-                <td className="td-actions">
-                  <button className="row-del" onClick={() => { if (confirm(`Изтрий „${item.text}“?`)) onRemove(item.id) }} title="Изтрий" aria-label="Изтрий"><X size={13} /></button>
-                </td>
+                <td className={`td-points td-points-${item.color}`}>{item.color === 'red' ? '−' : '+'}{itemScore(item)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="table-total">
-              <td colSpan={4}>Общо точки</td>
-              <td className="td-points">
-                <span style={{ color: 'var(--green)' }}>+{stats.gScore}</span>
-                {' / '}
-                <span style={{ color: 'var(--red)' }}>−{stats.rScore}</span>
+              <td colSpan={5} className="score-guide-cell">
+                <div className="score-guide">
+                  <span className="guide-item guide-avg">Среден ≥ {tAvg}</span>
+                  <span className="guide-item guide-good">Добър ≥ {tGood}</span>
+                  <span className="guide-item guide-exc">Отличен ≥ {tExc}</span>
+                  <span className="guide-max">точки · макс +{stats.gMax}</span>
+                </div>
               </td>
-              <td colSpan={2}>
-                Съвместимост: <strong style={{ color: 'var(--accent)' }}>{stats.compat}%</strong>
-              </td>
+              <td className="total-label">Общо точки</td>
+              <td className={`td-points total-points ${net >= tExc ? 'lvl-exc' : net >= tGood ? 'lvl-good' : net >= tAvg ? 'lvl-avg' : 'lvl-low'}`}>{net}</td>
             </tr>
           </tfoot>
         </table>
