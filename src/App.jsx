@@ -192,14 +192,23 @@ function computeStats(profile) {
   const greenPct = Math.round((gScore / gMax) * 100)
   const redPct = Math.round((rScore / rMax) * 100)
 
-  // Smarter compatibility: blend (a) how the weighted intensity splits between
-  // green and red, with (b) how the sheer NUMBER of flags splits green vs red.
-  // This way "4 more green flags than red" actually lifts the score instead of
-  // a naive greenPct − redPct that ignores volume.
-  const gCount = g.length, rCount = r.length
+  // Compatibility — count ONLY rated flags (rating > 0); unrated/empty flags
+  // are excluded from the equation. Blends:
+  //   (a) intensityShare = green weighted points / (green + red points)  [70%]
+  //   (b) countShare     = # rated green flags / (rated green + red)     [30%]
+  // then applies a Bayesian shrinkage toward neutral 0.5 (IMDb/Evan-Miller style)
+  // so a couple of rated flags don't produce an overconfident score.
+  const ratedG = g.filter(i => i.rating > 0)
+  const ratedR = r.filter(i => i.rating > 0)
+  const nG = ratedG.length, nR = ratedR.length, n = nG + nR
   const intensityShare = (gScore + rScore) > 0 ? gScore / (gScore + rScore) : 0.5
-  const countShare = (gCount + rCount) > 0 ? gCount / (gCount + rCount) : 0.5
-  const compat = Math.max(0, Math.min(100, Math.round((0.7 * intensityShare + 0.3 * countShare) * 100)))
+  const countShare = (nG + nR) > 0 ? nG / (nG + nR) : 0.5
+  const blended = 0.7 * intensityShare + 0.3 * countShare
+  const PRIOR_STRENGTH = 4 // "virtual" neutral flags; ~50% confidence at 4 rated flags
+  const compat01 = (n * blended + PRIOR_STRENGTH * 0.5) / (n + PRIOR_STRENGTH)
+  const compat = Math.max(0, Math.min(100, Math.round(compat01 * 100)))
+  const confidence = Math.round((n / (n + PRIOR_STRENGTH)) * 100)
+  const gCount = nG, rCount = nR
 
   // Gates: triggered dealbreakers (present red) and unmet must-haves (absent green).
   const triggeredDealbreakers = (profile.dealbreakers || []).filter(i => i.rating > 0).map(i => i.text)
@@ -207,7 +216,7 @@ function computeStats(profile) {
   return {
     greenChecked: g.filter(i=>i.rating > 0).length, greenTotal: g.length,
     redChecked: r.filter(i=>i.rating > 0).length, redTotal: r.length,
-    greenPct, redPct, compat, triggeredDealbreakers, unmetMusthaves,
+    greenPct, redPct, compat, confidence, ratedCount: n, triggeredDealbreakers, unmetMusthaves,
     intensityShare: Math.round(intensityShare * 100), countShare: Math.round(countShare * 100),
     gCount, rCount,
     // Weighted-point breakdown so the compatibility number is transparent.
@@ -798,12 +807,12 @@ Output exactly this structure in Bulgarian:
           </section>
           <div className="score-breakdown card">
             <div className="score-breakdown-row">
-              <span>Зелени точки · брой</span>
-              <span><strong style={{ color: 'var(--green)' }}>{stats.gScore}</strong> т. · {stats.gCount} флага</span>
+              <span>Зелени · оценени</span>
+              <span><strong style={{ color: 'var(--green)' }}>{stats.gScore}</strong> т. · {stats.gCount} оценени</span>
             </div>
             <div className="score-breakdown-row">
-              <span>Червени точки · брой</span>
-              <span><strong style={{ color: 'var(--red)' }}>{stats.rScore}</strong> т. · {stats.rCount} флага</span>
+              <span>Червени · оценени</span>
+              <span><strong style={{ color: 'var(--red)' }}>{stats.rScore}</strong> т. · {stats.rCount} оценени</span>
             </div>
             <div className="score-breakdown-row">
               <span>Интензитет (зелено дял)</span>
@@ -813,10 +822,14 @@ Output exactly this structure in Bulgarian:
               <span>Баланс по брой (зелено дял)</span>
               <span>{stats.countShare}% <span style={{ color: 'var(--muted)' }}>· тегло 30%</span></span>
             </div>
-            <div className="score-breakdown-formula">
-              Съвместимост = 0.7×{stats.intensityShare}% + 0.3×{stats.countShare}% = <strong>{stats.compat}%</strong>
+            <div className="score-breakdown-row">
+              <span>Увереност ({stats.ratedCount} оценени)</span>
+              <span>{stats.confidence}% <span style={{ color: 'var(--muted)' }}>· тегли към 50% при малко данни</span></span>
             </div>
-            <div className="score-breakdown-note">Отчита и интензитета (оценка×тежест), и колко флага има от всеки цвят. Точки = оценка (1–5) × тежест (1–3).</div>
+            <div className="score-breakdown-formula">
+              Съвместимост = <strong>{stats.compat}%</strong>
+            </div>
+            <div className="score-breakdown-note">Броят се само оценени флагове (rating&gt;0). Малко данни → резултатът се притегля към неутрални 50% (Bayesian среднопретегляне).</div>
           </div>
           <div className={`verdict ${verdict.cls}`}>{verdict.text}</div>
           <details className="verdict-legend card">
