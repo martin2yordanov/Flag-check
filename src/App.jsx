@@ -178,6 +178,10 @@ function loadLocal(userId) {
 const itemScore = (i) => i.rating * (i.weight || 2)
 const itemMax = (i) => 5 * (i.weight || 2)
 
+// Stable sort by weight desc (3 on top → 1 at bottom); equal weights keep their
+// manual (array) order, so manual reordering within a weight group is preserved.
+const byWeightDesc = (items) => [...items].sort((a, b) => (b.weight || 2) - (a.weight || 2))
+
 function computeStats(profile) {
   const g = [...(profile.green || []), ...(profile.musthaves || [])]
   const r = [...(profile.red || []), ...(profile.dealbreakers || [])]
@@ -385,7 +389,26 @@ function FlagCheckApp() {
     }))
     setBannerDismissed(false)
   }
-  const updateItem = (id, patch) => updateActive(p => mapLists(p, it => it.id === id ? { ...it, ...patch } : it))
+  const updateItem = (id, patch) => updateActive(p => {
+    const np = {}
+    for (const k of LISTS) {
+      const arr = p[k] || []
+      const idx = arr.findIndex(i => i.id === id)
+      if (idx === -1) { np[k] = arr; continue }
+      const item = arr[idx]
+      const updated = { ...item, ...patch }
+      // When weight changes, reposition so it lands at the edge of its new weight
+      // group: heavier → end of array (bottom of the higher group), lighter →
+      // front (top of the lower group). Display is stable-sorted by weight desc.
+      if (patch.weight != null && patch.weight !== (item.weight || 2)) {
+        const rest = arr.filter(i => i.id !== id)
+        np[k] = patch.weight > (item.weight || 2) ? [...rest, updated] : [updated, ...rest]
+      } else {
+        np[k] = arr.map(i => i.id === id ? updated : i)
+      }
+    }
+    return np
+  })
   const removeItem = (id) => updateActive(p => {
     const np = { ...p }
     for (const k of LISTS) np[k] = (p[k] || []).filter(it => it.id !== id)
@@ -1120,6 +1143,7 @@ function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, banner
 
 function BannerZone({ accent, zone, title, Icon, items, onRate, onRemove, onUpdate, activeId }) {
   const { setNodeRef, isOver } = useDroppable({ id: `zone:${zone}` })
+  const sorted = byWeightDesc(items)
   return (
     <div className={`board-banner board-banner-${accent} ${isOver ? 'banner-over' : ''}`}>
       <div className="board-banner-head">
@@ -1128,10 +1152,10 @@ function BannerZone({ accent, zone, title, Icon, items, onRate, onRemove, onUpda
         <span className="count">{items.length}</span>
       </div>
       <ul ref={setNodeRef} className={`list banner-list ${items.length === 0 ? 'banner-list-empty' : ''}`}>
-        {items.length === 0 ? (
+        {sorted.length === 0 ? (
           <li className="priority-empty">Влачи флаг тук ↑</li>
         ) : (
-          items.map(item => (
+          sorted.map(item => (
             <SortableRow
               key={item.id} item={item} accent={accent} which={zone} special
               onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
@@ -1147,6 +1171,7 @@ function BannerZone({ accent, zone, title, Icon, items, onRate, onRemove, onUpda
 function CategorySection({ which, accent, catId, label, color, icon, items, activeId, onRate, onRemove, onUpdate }) {
   const { setNodeRef, isOver } = useDroppable({ id: `zone:${which}:${catId}` })
   const rated = items.filter(i => i.rating > 0).length
+  const sorted = byWeightDesc(items)
   return (
     <div className={`cat-section ${isOver ? 'cat-over' : ''}`} style={{ '--cat-color': color }}>
       <div className="cat-head">
@@ -1155,10 +1180,10 @@ function CategorySection({ which, accent, catId, label, color, icon, items, acti
         <span className="cat-count">{rated}/{items.length}</span>
       </div>
       <ul ref={setNodeRef} className={`list cat-list ${items.length === 0 ? 'cat-list-empty' : ''}`}>
-        {items.length === 0 ? (
+        {sorted.length === 0 ? (
           <li className="priority-empty">Пусни тук</li>
         ) : (
-          items.map(item => (
+          sorted.map(item => (
             <SortableRow
               key={item.id} item={item} accent={accent} which={`${which}:${catId}`}
               onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
