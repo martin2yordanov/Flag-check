@@ -1249,3 +1249,19 @@
 .total-line { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 .total-points { font-size: 21px; }
 .total-sub { font-size: 12px; color: var(--muted); text-align: right; margin-top: 2px; font-weight: 600; }
+
+/* v4.0 — dealbreaker banner opacity, JSON data modal, compare selectors */
+.banner-db { opacity: 0.5; }
+
+.data-actions { display: flex; gap: 10px; margin-bottom: 12px; }
+.data-btn {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px; border-radius: 10px;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); font-size: 14px; font-weight: 600;
+}
+.data-btn:active { background: var(--panel-3); }
+
+.compare-select-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.compare-select { flex: 1; min-width: 0; font-size: 14px; padding: 10px; }
+.compare-vs { font-size: 13px; color: var(--muted); font-weight: 600; flex-shrink: 0; }
