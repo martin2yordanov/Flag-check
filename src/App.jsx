@@ -530,7 +530,12 @@ function FlagCheckApp() {
     if (!confirm('Изтрий този профил?')) return
     setState(s => {
       const remaining = s.profiles.filter(p => p.id !== id)
-      return { ...s, profiles: remaining, activeId: s.activeId === id ? remaining[0].id : s.activeId }
+      return {
+        ...s,
+        profiles: remaining,
+        activeId: s.activeId === id ? remaining[0].id : s.activeId,
+        compareIds: (s.compareIds || []).filter(x => x !== id),
+      }
     })
   }
 
@@ -979,20 +984,20 @@ Output exactly this structure in Bulgarian:
         </section>
       )}
 
-      {tab === 'compare' && (
-        <section className="card">
-          <div className="card-title">Сравни профили</div>
-          <div className="modal-help">
-            Натисни таговете отгоре, за да избереш 2 профила. Избрани: {(state.compareIds || []).length}/2
-          </div>
-          {(state.compareIds || []).length === 2 && (
-            <CompareView
-              a={state.profiles.find(p => p.id === state.compareIds[0])}
-              b={state.profiles.find(p => p.id === state.compareIds[1])}
-            />
-          )}
-        </section>
-      )}
+      {tab === 'compare' && (() => {
+        const selected = (state.compareIds || [])
+          .map(id => state.profiles.find(p => p.id === id))
+          .filter(Boolean)
+        return (
+          <section className="card">
+            <div className="card-title">Сравни профили</div>
+            <div className="modal-help">
+              Натисни таговете отгоре, за да избереш 2 профила. Избрани: {selected.length}/2
+            </div>
+            {selected.length === 2 && <CompareView a={selected[0]} b={selected[1]} />}
+          </section>
+        )
+      })()}
 
       {tab === 'insights' && (
         <section className="card">
@@ -1458,6 +1463,7 @@ function HistoryChart({ history }) {
 }
 
 function CompareView({ a, b }) {
+  if (!a || !b) return <div className="empty">Един от избраните профили вече не съществува. Избери други два.</div>
   const sa = computeStats(a), sb = computeStats(b)
   const aGreen = [...a.green, ...(a.musthaves || [])], bGreen = [...b.green, ...(b.musthaves || [])]
   const aRed = [...a.red, ...(a.dealbreakers || [])], bRed = [...b.red, ...(b.dealbreakers || [])]
