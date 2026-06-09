@@ -707,17 +707,16 @@ Output exactly this structure in Bulgarian:
 ПРИСЪДА: [продължи / внимавай / бягай — едно изречение обосновка]`
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': state.apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
+          Authorization: `Bearer ${state.apiKey}`,
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'llama-3.3-70b-versatile',
           max_tokens: 500,
+          temperature: 0.7,
           messages: [{ role: 'user', content: prompt }],
         }),
       })
@@ -726,7 +725,7 @@ Output exactly this structure in Bulgarian:
         throw new Error(`API ${res.status}: ${errText.slice(0, 200)}`)
       }
       const data = await res.json()
-      const text = data.content?.map(c => c.text || '').join('\n') || 'Няма отговор'
+      const text = data.choices?.[0]?.message?.content || 'Няма отговор'
       setInsight({ loading: false, text, error: '' })
     } catch (e) {
       setInsight({ loading: false, text: '', error: e.message })
@@ -1020,7 +1019,7 @@ Output exactly this structure in Bulgarian:
           <div className="modal-help">
             {state.apiKey
               ? 'Изпраща текущия профил към Claude за анализ. Брутално директен изход.'
-              : 'Нужен е Anthropic API ключ. Натисни „Добави API ключ“ горе вдясно. Вземи ключ от console.anthropic.com.'}
+              : 'Нужен е Groq API ключ (безплатен). Натисни „Добави API ключ“ горе вдясно. Вземи ключ от console.groq.com.'}
           </div>
           <button className="insight-btn" onClick={runInsight} disabled={insight.loading}>
             {insight.loading ? 'Анализирам…' : '🧠 Стартирай анализ'}
@@ -1052,12 +1051,12 @@ Output exactly this structure in Bulgarian:
             )}
             {modal.type === 'apiKey' && (
               <Fragment>
-                <h3>Anthropic API ключ</h3>
+                <h3>Groq API ключ</h3>
                 <div className="modal-help">
-                  Запазен само локално. Използва се за директни заявки към Claude API от браузъра. Вземи ключ от console.anthropic.com.
+                  Безплатен ключ от console.groq.com. Запазва се само в твоя профил и се ползва за директни заявки към Groq от браузъра.
                 </div>
                 <input
-                  type="password" placeholder="sk-ant-…" value={modalInput}
+                  type="password" placeholder="gsk_…" value={modalInput}
                   onChange={e => setModalInput(e.target.value)}
                   autoFocus
                   onKeyDown={e => { if (e.key === 'Enter') confirmModal() }}
