@@ -1433,12 +1433,12 @@ function Rating({ accent, value, onChange }) {
   )
 }
 
-function Ring({ value, color, label, sub, big }) {
+function Ring({ value, color, label, sub, big, text }) {
   const size = big ? 150 : 110
   const stroke = big ? 12 : 10
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
-  const offset = c - (value / 100) * c
+  const offset = c - (Math.max(0, Math.min(100, value)) / 100) * c
   return (
     <div className="ring">
       <svg width={size} height={size}>
@@ -1450,8 +1450,8 @@ function Ring({ value, color, label, sub, big }) {
           transform={`rotate(-90 ${size/2} ${size/2})`}
           style={{ transition: 'stroke-dashoffset 0.5s ease' }}
         />
-        <text x="50%" y="50%" textAnchor="middle" dy="0.35em" fill="var(--text)" fontSize={big ? 30 : 22} fontWeight="600">
-          {value}%
+        <text x="50%" y="50%" textAnchor="middle" dy="0.35em" fill="var(--text)" fontSize={big ? 28 : 22} fontWeight="600">
+          {text ?? `${value}%`}
         </text>
       </svg>
       <div className="ring-label">{label}</div>
@@ -1547,6 +1547,16 @@ function CompareView({ a, b }) {
 
       <div className="compare-summary card">
         <div className="cs-head">{tie ? '🤝 Равностойни' : `🏆 ${better.name} води`}</div>
+        <div className="cs-ring">
+          <Ring
+            value={rel != null ? rel : 100}
+            color="var(--accent)"
+            label={tie ? 'равни' : 'по-добър'}
+            sub={tie ? '' : better.name}
+            big
+            text={tie ? '0%' : (rel != null ? `${rel}%` : '∞')}
+          />
+        </div>
         <div className="cs-bar">
           <div className="cs-bar-a" style={{ width: `${ca + cb > 0 ? (ca / (ca + cb)) * 100 : 50}%` }} />
           <div className="cs-bar-b" style={{ width: `${ca + cb > 0 ? (cb / (ca + cb)) * 100 : 50}%` }} />
@@ -1555,16 +1565,10 @@ function CompareView({ a, b }) {
           <div className="cs-row"><span style={{ color: 'var(--green)' }}>{a.name}</span><strong>{ca}%</strong></div>
           <div className="cs-row"><span style={{ color: 'var(--accent)' }}>{b.name}</span><strong>{cb}%</strong></div>
           <div className="cs-row"><span>Разлика</span><strong>{diff} проц. пункта</strong></div>
-          {!tie && (
-            <div className="cs-row">
-              <span>Относително</span>
-              <strong>{better.name} е с {rel != null ? `${rel}%` : '∞'} по-добър</strong>
-            </div>
-          )}
           <div className="cs-row"><span>Дял на надмощие</span><strong>{share}% : {100 - share}%</strong></div>
         </div>
         <div className="cs-note">
-          Разлика = пряко изваждане на процентите (процентни пункта). Относително = (по-висок − по-нисък) / по-нисък × 100 — с колко % единият превъзхожда другия. Дял на надмощие = по-висок / (по-висок + по-нисък) — доминация на скала 50–100%.
+          Кръгът показва относителното предимство: (по-висок − по-нисък) / по-нисък × 100 — с колко % единият превъзхожда другия. Разлика = пряко изваждане (процентни пункта). Дял на надмощие = по-висок / (по-висок + по-нисък).
         </div>
       </div>
     </div>

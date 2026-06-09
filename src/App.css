@@ -1276,3 +1276,6 @@
 .cs-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); }
 .cs-row strong { color: var(--text); font-weight: 700; }
 .cs-note { font-size: 11px; color: var(--muted); line-height: 1.45; border-top: 1px solid var(--border); padding-top: 10px; }
+
+/* v4.2 — compare relative ring centered */
+.cs-ring { display: flex; justify-content: center; margin: 6px 0 14px; }
