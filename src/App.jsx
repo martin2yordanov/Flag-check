@@ -1493,6 +1493,17 @@ function HistoryChart({ history }) {
 
 function CompareView({ a, b }) {
   const sa = computeStats(a), sb = computeStats(b)
+  // Head-to-head math:
+  //  • diff  = direct subtraction of the two compatibility %s (percentage points)
+  //  • rel   = (higher − lower) / lower × 100  → "X% better than the other"
+  //  • share = higher / (higher + lower)        → dominance on a 50–100% scale
+  const ca = sa.compat, cb = sb.compat
+  const tie = ca === cb
+  const better = ca >= cb ? a : b
+  const hi = Math.max(ca, cb), lo = Math.min(ca, cb)
+  const diff = hi - lo
+  const rel = lo > 0 ? Math.round(((hi - lo) / lo) * 100) : null
+  const share = (hi + lo) > 0 ? Math.round((hi / (hi + lo)) * 100) : 50
   const aGreen = [...a.green, ...(a.musthaves || [])], bGreen = [...b.green, ...(b.musthaves || [])]
   const aRed = [...a.red, ...(a.dealbreakers || [])], bRed = [...b.red, ...(b.dealbreakers || [])]
   const greenLabels = Array.from(new Set([...aGreen.map(i=>i.text), ...bGreen.map(i=>i.text)]))
@@ -1532,6 +1543,29 @@ function CompareView({ a, b }) {
             <div key={`b-r-${label}`} className={`compare-cell ${bi?.rating > 0 ? 'yes-red' : 'no'}`}>{cell(bi)}</div>,
           ]
         })}
+      </div>
+
+      <div className="compare-summary card">
+        <div className="cs-head">{tie ? '🤝 Равностойни' : `🏆 ${better.name} води`}</div>
+        <div className="cs-bar">
+          <div className="cs-bar-a" style={{ width: `${ca + cb > 0 ? (ca / (ca + cb)) * 100 : 50}%` }} />
+          <div className="cs-bar-b" style={{ width: `${ca + cb > 0 ? (cb / (ca + cb)) * 100 : 50}%` }} />
+        </div>
+        <div className="cs-rows">
+          <div className="cs-row"><span style={{ color: 'var(--green)' }}>{a.name}</span><strong>{ca}%</strong></div>
+          <div className="cs-row"><span style={{ color: 'var(--accent)' }}>{b.name}</span><strong>{cb}%</strong></div>
+          <div className="cs-row"><span>Разлика</span><strong>{diff} проц. пункта</strong></div>
+          {!tie && (
+            <div className="cs-row">
+              <span>Относително</span>
+              <strong>{better.name} е с {rel != null ? `${rel}%` : '∞'} по-добър</strong>
+            </div>
+          )}
+          <div className="cs-row"><span>Дял на надмощие</span><strong>{share}% : {100 - share}%</strong></div>
+        </div>
+        <div className="cs-note">
+          Разлика = пряко изваждане на процентите (процентни пункта). Относително = (по-висок − по-нисък) / по-нисък × 100 — с колко % единият превъзхожда другия. Дял на надмощие = по-висок / (по-висок + по-нисък) — доминация на скала 50–100%.
+        </div>
       </div>
     </div>
   )
