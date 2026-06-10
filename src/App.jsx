@@ -51,35 +51,38 @@ const CATEGORIES = [
 const CATEGORY_IDS = CATEGORIES.map(c => c.id)
 const DEFAULT_CATEGORY = 'personal'
 
-// Curated suggestion library (evaluating a woman) — tap to add to the current profile.
+// Curated suggestion library with gendered Bulgarian wording: f = evaluating a
+// woman, m = evaluating a man. Picked via the user's onboarding choice.
 const SUGGESTED = {
   green: [
-    { text: 'Плаща си сама сметката', category: 'qualities' },
-    { text: 'Пита за мнението ми и се вслушва в съветите ми', category: 'eq' },
-    { text: 'Признава кога греши и се извинява първа', category: 'eq' },
-    { text: 'Има доверие — не рови в телефона ми', category: 'personal' },
-    { text: 'Говори ме хубаво пред други хора', category: 'eq' },
-    { text: 'Не вади стари кавги по време на нов спор', category: 'eq' },
-    { text: 'Финансово отговорна — не живее над възможностите си', category: 'qualities' },
-    { text: 'Уважава времето ми с приятели и семейство', category: 'personal' },
-    { text: 'Приема ме такъв, не се опитва да ме „поправя"', category: 'qualities' },
-    { text: 'Поема инициатива за планове, не чака само мен', category: 'personal' },
-    { text: 'Любопитна и се развива — чете, учи, има интереси', category: 'qualities' },
-    { text: 'Спокойна е около мои колежки и приятелки', category: 'eq' },
+    { f: 'Плаща си сама сметката', m: 'Плаща си сам сметката', category: 'qualities' },
+    { f: 'Пита за мнението ми и се вслушва в съветите ми', m: 'Пита за мнението ми и се вслушва в съветите ми', category: 'eq' },
+    { f: 'Признава кога греши и се извинява първа', m: 'Признава кога греши и се извинява първи', category: 'eq' },
+    { f: 'Има доверие — не рови в телефона ми', m: 'Има доверие — не рови в телефона ми', category: 'personal' },
+    { f: 'Говори ме хубаво пред други хора', m: 'Говори ме хубаво пред други хора', category: 'eq' },
+    { f: 'Не вади стари кавги по време на нов спор', m: 'Не вади стари кавги по време на нов спор', category: 'eq' },
+    { f: 'Финансово отговорна — не живее над възможностите си', m: 'Финансово отговорен — не живее над възможностите си', category: 'qualities' },
+    { f: 'Уважава времето ми с приятели и семейство', m: 'Уважава времето ми с приятели и семейство', category: 'personal' },
+    { f: 'Приема ме такъв, не се опитва да ме „поправя“', m: 'Приема ме такъв, не се опитва да ме „поправя“', category: 'qualities' },
+    { f: 'Поема инициатива за планове, не чака само мен', m: 'Поема инициатива за планове, не чака само мен', category: 'personal' },
+    { f: 'Любопитна и се развива — чете, учи, има интереси', m: 'Любопитен и се развива — чете, учи, има интереси', category: 'qualities' },
+    { f: 'Спокойна е около мои колежки и приятелки', m: 'Спокоен е около мои колеги и приятели', category: 'eq' },
   ],
   red: [
-    { text: 'Синдром на жертвата', category: 'qualities' },
-    { text: 'Тества ме с игрички и мълчаливи проверки', category: 'eq' },
-    { text: 'Флиртува с други, за да ме ревнува', category: 'personal' },
-    { text: 'Сравнява ме с бившите си', category: 'eq' },
-    { text: 'Заплашва с раздяла при всеки спор', category: 'eq' },
-    { text: 'Говори лошо за мен пред приятелките си', category: 'eq' },
-    { text: 'Лъже за дребни неща', category: 'qualities' },
-    { text: 'Държи се различно на публично и насаме', category: 'qualities' },
-    { text: 'Прекалено зависима — не може да е сама', category: 'personal' },
-    { text: 'Импулсивно харчене / разчита само на мен финансово', category: 'qualities' },
+    { f: 'Синдром на жертвата', m: 'Синдром на жертвата', category: 'qualities' },
+    { f: 'Тества ме с игрички и мълчаливи проверки', m: 'Тества ме с игрички и мълчаливи проверки', category: 'eq' },
+    { f: 'Флиртува с други, за да ме ревнува', m: 'Флиртува с други, за да ме ревнува', category: 'personal' },
+    { f: 'Сравнява ме с бившите си', m: 'Сравнява ме с бившите си', category: 'eq' },
+    { f: 'Заплашва с раздяла при всеки спор', m: 'Заплашва с раздяла при всеки спор', category: 'eq' },
+    { f: 'Говори лошо за мен пред приятелките си', m: 'Говори лошо за мен пред приятелите си', category: 'eq' },
+    { f: 'Социалните мрежи са ѝ по-важни', m: 'Социалните мрежи са му по-важни', category: 'personal' },
+    { f: 'Лъже за дребни неща', m: 'Лъже за дребни неща', category: 'qualities' },
+    { f: 'Държи се различно на публично и насаме', m: 'Държи се различно на публично и насаме', category: 'qualities' },
+    { f: 'Прекалено зависима — не може да е сама', m: 'Прекалено зависим — не може да е сам', category: 'personal' },
+    { f: 'Импулсивно харчене / разчита само на мен финансово', m: 'Импулсивно харчене / разчита само на мен финансово', category: 'qualities' },
   ],
 }
+const genderText = (s, gender) => (gender === 'male' ? s.m : s.f)
 
 // Default left→right order of the editable table's columns (notes last).
 const TABLE_COL_IDS = ['actions', 'color', 'name', 'rating', 'weight', 'points', 'note']
@@ -149,12 +152,18 @@ function normalizeState(p) {
   p.streak = p.streak || { count: 0, lastDay: null }
   p.apiKey = p.apiKey || ''
   p.compareIds = p.compareIds || []
+  p.gender = (p.gender === 'male' || p.gender === 'female') ? p.gender : 'female'
+  // Existing users (already have any flags/history) skip onboarding.
+  if (typeof p.onboarded !== 'boolean') {
+    p.onboarded = p.profiles.some(pr =>
+      (pr.green?.length || pr.red?.length || pr.musthaves?.length || pr.dealbreakers?.length || pr.history?.length))
+  }
   return p
 }
 
 function defaultState() {
   const def = makeProfile('Профил 1')
-  return { profiles: [def], activeId: def.id, streak: { count: 0, lastDay: null }, apiKey: '', compareIds: [] }
+  return { profiles: [def], activeId: def.id, streak: { count: 0, lastDay: null }, apiKey: '', compareIds: [], gender: 'female', onboarded: false }
 }
 
 function loadLocal(userId) {
@@ -271,6 +280,29 @@ function SignInScreen() {
         <p>Влез или регистрирай се, за да синхронизираш профилите си между устройства.</p>
       </div>
       <SignIn routing="hash" signUpUrl="#/sign-up" />
+    </div>
+  )
+}
+
+function Onboarding({ onChoose }) {
+  return (
+    <div className="onboarding">
+      <div className="onboarding-inner">
+        <Flag size={40} className="logo-icon" />
+        <h1>Добре дошъл във Flag Check</h1>
+        <p>Кого ще оценяваш? Това нагласява езика и предложенията.</p>
+        <div className="onboarding-choices">
+          <button className="onboarding-btn ob-female" onClick={() => onChoose('female')}>
+            <span className="ob-emoji">♀</span>
+            <span className="ob-label">Оценявам жени</span>
+          </button>
+          <button className="onboarding-btn ob-male" onClick={() => onChoose('male')}>
+            <span className="ob-emoji">♂</span>
+            <span className="ob-label">Оценявам мъже</span>
+          </button>
+        </div>
+        <p className="onboarding-note">Това нагласява само езика на предложенията.</p>
+      </div>
     </div>
   )
 }
@@ -457,7 +489,24 @@ function FlagCheckApp() {
     updateActive(p => ({ ...p, [which]: [...(p[which] || []), { ...newItem(text), category }] }))
   }
   const catLabel = (id) => CATEGORIES.find(c => c.id === id)?.label || ''
-  const openSuggest = (which) => setModal({ type: 'suggest', which })
+  // Suggestion pool = curated (gendered) + every flag the user has typed across
+  // all their profiles (harvested at runtime), deduped by text.
+  const suggestionsFor = (which) => {
+    const out = []
+    const seen = new Set()
+    const add = (text, category) => {
+      const key = (text || '').trim().toLowerCase()
+      if (!key || seen.has(key)) return
+      seen.add(key)
+      out.push({ text, category })
+    }
+    ;(SUGGESTED[which] || []).forEach(s => add(genderText(s, state.gender), s.category))
+    state.profiles.forEach(p => {
+      const lists = which === 'green' ? [p.green, p.musthaves] : [p.red, p.dealbreakers]
+      lists.forEach(l => (l || []).forEach(i => add(i.text, i.category)))
+    })
+    return out
+  }
   const hasFlag = (which, text) => {
     const t = text.trim().toLowerCase()
     const lists = which === 'green' ? [active.green, active.musthaves] : [active.red, active.dealbreakers]
@@ -735,6 +784,10 @@ Output exactly this structure in Bulgarian:
   const verdict = verdictFor(stats.compat, stats.redPct)
   const dbBanner = (stats.triggeredDealbreakers.length > 0 || stats.unmetMusthaves.length > 0) && !bannerDismissed
 
+  if (!state.onboarded) {
+    return <Onboarding onChoose={(gender) => setState(s => ({ ...s, gender, onboarded: true }))} />
+  }
+
   return (
     <div className="app">
       <header className="header">
@@ -858,7 +911,8 @@ Output exactly this structure in Bulgarian:
           <Board
             profile={active}
             onRate={setRating} onRemove={removeItem} onUpdate={updateItem} onMove={moveItem}
-            onSuggest={openSuggest}
+            addFlag={addFlag} hasFlag={hasFlag}
+            suggestGreen={suggestionsFor('green')} suggestRed={suggestionsFor('red')}
             newGreen={newGreen} setNewGreen={setNewGreen} addGreen={() => addItem('green', newGreen, setNewGreen)}
             newRed={newRed} setNewRed={setNewRed} addRed={() => addItem('red', newRed, setNewRed)}
           />
@@ -1077,24 +1131,6 @@ Output exactly this structure in Bulgarian:
                 </div>
               </Fragment>
             )}
-            {modal.type === 'suggest' && (
-              <Fragment>
-                <h3>{modal.which === 'red' ? '🔴 Червени предложения' : '🟢 Зелени предложения'}</h3>
-                <div className="modal-help">Докосни „+“, за да добавиш към „{active.name}“. Базирано на психология (Gottman, Perel, „Attached“).</div>
-                <div className="suggest-list">
-                  {(SUGGESTED[modal.which] || []).map(s => {
-                    const added = hasFlag(modal.which, s.text)
-                    return (
-                      <div key={s.text} className="suggest-row">
-                        <span className="suggest-text">{s.text}</span>
-                        <span className="suggest-cat">{catLabel(s.category)}</span>
-                        <button className={`suggest-add sg-${modal.which}`} disabled={added} onClick={() => addFlag(modal.which, s.text, s.category)}>{added ? <Check size={14} /> : <Plus size={14} />}</button>
-                      </div>
-                    )
-                  })}
-                </div>
-              </Fragment>
-            )}
             {modal.type === 'copyFrom' && (
               <Fragment>
                 <h3>Копирай флагове в „{active.name}“</h3>
@@ -1160,7 +1196,7 @@ Output exactly this structure in Bulgarian:
 
 // One DndContext spanning both colours so items can be dragged between
 // green/red columns and the must-have/dealbreaker banners.
-function Board({ profile, onRate, onRemove, onUpdate, onMove, onSuggest, newGreen, setNewGreen, addGreen, newRed, setNewRed, addRed }) {
+function Board({ profile, onRate, onRemove, onUpdate, onMove, addFlag, hasFlag, suggestGreen, suggestRed, newGreen, setNewGreen, addGreen, newRed, setNewRed, addRed }) {
   const [activeId, setActiveId] = useState(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -1218,7 +1254,8 @@ function Board({ profile, onRate, onRemove, onUpdate, onMove, onSuggest, newGree
           columnTitle="Зелени флагове" bannerTitle="Задължителни" bannerIcon={Star}
           columnItems={profile.green} bannerItems={profile.musthaves || []}
           activeId={activeId}
-          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} onSuggest={onSuggest}
+          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
+          addFlag={addFlag} hasFlag={hasFlag} suggestions={suggestGreen}
           newValue={newGreen} setNewValue={setNewGreen} onAdd={addGreen}
         />
         <BoardSide
@@ -1226,7 +1263,8 @@ function Board({ profile, onRate, onRemove, onUpdate, onMove, onSuggest, newGree
           columnTitle="Червени флагове" bannerTitle="Dealbreakers (пречки)" bannerIcon={Ban}
           columnItems={profile.red} bannerItems={profile.dealbreakers || []}
           activeId={activeId}
-          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} onSuggest={onSuggest}
+          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
+          addFlag={addFlag} hasFlag={hasFlag} suggestions={suggestRed}
           newValue={newRed} setNewValue={setNewRed} onAdd={addRed}
         />
       </main>
@@ -1242,7 +1280,7 @@ function Board({ profile, onRate, onRemove, onUpdate, onMove, onSuggest, newGree
   )
 }
 
-function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, bannerIcon: BannerIcon, columnItems, bannerItems, activeId, onRate, onRemove, onUpdate, onSuggest, newValue, setNewValue, onAdd }) {
+function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, bannerIcon: BannerIcon, columnItems, bannerItems, activeId, onRate, onRemove, onUpdate, addFlag, hasFlag, suggestions, newValue, setNewValue, onAdd }) {
   return (
     <section className={`side side-${accent}`}>
       <BannerZone
@@ -1271,10 +1309,46 @@ function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, banner
             onKeyDown={e => { if (e.key === 'Enter') onAdd() }}
           />
           <button className={`add-btn add-btn-${accent}`} onClick={onAdd} title="Добави нов флаг" aria-label="Добави нов флаг"><Plus size={16} /></button>
-          <button className={`add-btn add-btn-suggest add-suggest-${accent}`} onClick={() => onSuggest(which)} title="Избери готов флаг" aria-label="Предложени флагове"><Sparkles size={16} /></button>
         </div>
+        <SuggestBox accent={accent} which={which} suggestions={suggestions} addFlag={addFlag} hasFlag={hasFlag} />
       </div>
     </section>
+  )
+}
+
+function SuggestBox({ accent, which, suggestions, addFlag, hasFlag }) {
+  const [showAdded, setShowAdded] = useState(false)
+  const items = suggestions.map(s => ({ ...s, added: hasFlag(which, s.text) }))
+  const newOnes = items.filter(s => !s.added)
+  const addedOnes = items.filter(s => s.added)
+  const shown = showAdded ? [...newOnes, ...addedOnes] : newOnes
+  return (
+    <div className={`suggest-box suggest-box-${accent}`}>
+      <div className="suggest-box-head">
+        <span className="suggest-box-title">{accent === 'red' ? 'Червени предложения' : 'Зелени предложения'}</span>
+        <button className="suggest-box-toggle" onClick={() => setShowAdded(v => !v)}>
+          {showAdded ? <EyeOff size={12} /> : <Eye size={12} />}
+          {showAdded ? 'Скрий добавените' : 'Покажи добавените'}
+        </button>
+      </div>
+      <div className="suggest-tags">
+        {shown.length === 0 ? (
+          <span className="suggest-empty">Няма нови предложения.</span>
+        ) : (
+          shown.map(s => (
+            <button
+              key={s.text}
+              className={`suggest-tag suggest-tag-${accent} ${s.added ? 'added' : ''}`}
+              disabled={s.added}
+              onClick={() => !s.added && addFlag(which, s.text, s.category || DEFAULT_CATEGORY)}
+              title={s.added ? 'Вече добавено' : 'Добави'}
+            >
+              {s.added ? <Check size={11} /> : <Plus size={11} />} {s.text}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
   )
 }
 
