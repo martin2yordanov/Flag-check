@@ -25,7 +25,7 @@ import {
   KeyRound, FileDown, Save, Pencil, Plus, X, ChevronDown, ChevronRight,
   GripVertical, Flag, Sparkles, Brain, Flame, BarChart3, Table as TableIcon,
   BookOpen, GitCompare, Check, AlertTriangle, TrendingUp, TrendingDown,
-  Loader2, CloudOff, CloudCheck, Download, Upload, Trash2, Star, ArrowUpDown, Ban, Copy, Eye, EyeOff, Database,
+  Loader2, CloudOff, CloudCheck, Download, Upload, Trash2, Star, ArrowUpDown, Ban, Copy, Eye, EyeOff, Database, HelpCircle,
 } from 'lucide-react'
 import './App.css'
 
@@ -158,12 +158,13 @@ function normalizeState(p) {
     p.onboarded = p.profiles.some(pr =>
       (pr.green?.length || pr.red?.length || pr.musthaves?.length || pr.dealbreakers?.length || pr.history?.length))
   }
+  if (typeof p.tourSeen !== 'boolean') p.tourSeen = false
   return p
 }
 
 function defaultState() {
   const def = makeProfile('Профил 1')
-  return { profiles: [def], activeId: def.id, streak: { count: 0, lastDay: null }, apiKey: '', compareIds: [], gender: 'female', onboarded: false }
+  return { profiles: [def], activeId: def.id, streak: { count: 0, lastDay: null }, apiKey: '', compareIds: [], gender: 'female', onboarded: false, tourSeen: false }
 }
 
 function loadLocal(userId) {
@@ -307,6 +308,102 @@ function Onboarding({ onChoose }) {
   )
 }
 
+const TOUR_STEPS = [
+  { anchors: ['green-col'], text: 'Тук добави зелен флаг — позитивните неща.' },
+  { anchors: ['red-col'], text: 'Тук добави червен флаг — тревожните сигнали.' },
+  { anchors: ['green-add', 'red-add'], text: 'Избери флаг от шаблон или добави свой.' },
+  { anchors: ['results'], text: 'Тук виждаш съвместимостта и точките.' },
+  { anchors: ['tab-table'], text: 'Разгледай като таблица.' },
+  { anchors: ['tab-compare'], text: 'Сравнявай профили.' },
+]
+
+function Tour({ steps, onClose }) {
+  const [i, setI] = useState(0)
+  const [box, setBox] = useState(null)
+  const [vp, setVp] = useState({ w: window.innerWidth, h: window.innerHeight })
+  const step = steps[i]
+
+  useEffect(() => {
+    let raf
+    const measure = () => {
+      setVp({ w: window.innerWidth, h: window.innerHeight })
+      const els = step.anchors.map(a => document.querySelector(`[data-tour="${a}"]`)).filter(Boolean)
+      if (!els.length) { setBox(null); return }
+      const rs = els.map(el => el.getBoundingClientRect())
+      const targets = rs.map(r => ({ x: r.left, y: r.top, w: r.width, h: r.height, cx: r.left + r.width / 2, cy: r.top + r.height / 2 }))
+      const x1 = Math.min(...rs.map(r => r.left)), y1 = Math.min(...rs.map(r => r.top))
+      const x2 = Math.max(...rs.map(r => r.right)), y2 = Math.max(...rs.map(r => r.bottom))
+      setBox({ targets, union: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 } })
+    }
+    const first = document.querySelector(`[data-tour="${step.anchors[0]}"]`)
+    if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const t = setTimeout(measure, 400)
+    const onMove = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(measure) }
+    window.addEventListener('resize', onMove)
+    window.addEventListener('scroll', onMove, true)
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); if (e.key === 'Enter' || e.key === 'ArrowRight') next() }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      clearTimeout(t); cancelAnimationFrame(raf)
+      window.removeEventListener('resize', onMove)
+      window.removeEventListener('scroll', onMove, true)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [i]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const next = () => { if (i < steps.length - 1) setI(i + 1); else onClose() }
+
+  const cw = Math.min(300, vp.w - 32)
+  let callout = { top: 80, left: (vp.w - cw) / 2, below: true }
+  if (box) {
+    const u = box.union
+    const below = u.y + u.h + 170 < vp.h
+    const top = below ? u.y + u.h + 64 : Math.max(16, u.y - 168)
+    let left = u.x + u.w / 2 - cw / 2
+    left = Math.max(16, Math.min(left, vp.w - cw - 16))
+    callout = { top, left, below }
+  }
+  const pad = 8
+
+  return (
+    <div className="tour" onClick={next}>
+      {box && (
+        <div
+          className="tour-spot"
+          style={{ left: box.union.x - pad, top: box.union.y - pad, width: box.union.w + 2 * pad, height: box.union.h + 2 * pad }}
+        />
+      )}
+      <svg className="tour-svg" width={vp.w} height={vp.h}>
+        <defs>
+          <marker id="tour-ah" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto">
+            <path d="M2,2 L11,7 L2,12" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </marker>
+        </defs>
+        {box && box.targets.map((tg, idx) => {
+          const fromX = callout.left + cw / 2
+          const fromY = callout.below ? callout.top - 8 : callout.top + 96
+          const toX = tg.cx
+          const toY = callout.below ? tg.y + tg.h + 10 : tg.y - 10
+          const cpx = (fromX + toX) / 2 + (toX >= fromX ? 50 : -50)
+          const cpy = (fromY + toY) / 2
+          return <path key={idx} d={`M ${fromX} ${fromY} Q ${cpx} ${cpy} ${toX} ${toY}`} className="tour-arrow" markerEnd="url(#tour-ah)" />
+        })}
+      </svg>
+      <div className="tour-callout" style={{ top: callout.top, left: callout.left, width: cw }} onClick={e => e.stopPropagation()}>
+        <button className="tour-close" onClick={onClose} aria-label="Затвори"><X size={16} /></button>
+        <div className="tour-text">{step.text}</div>
+        <div className="tour-foot">
+          <span className="tour-count">{i + 1} / {steps.length}</span>
+          <div className="tour-btns">
+            {i < steps.length - 1 && <button className="tour-skip" onClick={onClose}>Пропусни</button>}
+            <button className="tour-next" onClick={next}>{i < steps.length - 1 ? 'Напред' : 'Готово'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function FlagCheckApp() {
   const { userId, getToken, isLoaded: authLoaded } = useAuth()
   const { user } = useUser()
@@ -319,6 +416,7 @@ function FlagCheckApp() {
   const [modalInput, setModalInput] = useState('')
   const [editingProfile, setEditingProfile] = useState(null)
   const [profileDraft, setProfileDraft] = useState('')
+  const [tourOpen, setTourOpen] = useState(false)
   const [bannerDismissed, setBannerDismissed] = useState(false)
   const [insight, setInsight] = useState({ loading: false, text: '', error: '' })
   const [journalText, setJournalText] = useState('')
@@ -411,6 +509,21 @@ function FlagCheckApp() {
       return { ...s, streak: { count: newCount, lastDay: t } }
     })
   }, [])
+
+  // Auto-run the guided tour once, after onboarding, on first visit.
+  useEffect(() => {
+    if (state.onboarded && !state.tourSeen) {
+      setTab('flags')
+      const t = setTimeout(() => setTourOpen(true), 500)
+      return () => clearTimeout(t)
+    }
+  }, [state.onboarded, state.tourSeen])
+
+  const startTour = () => { setTab('flags'); setTourOpen(true) }
+  const closeTour = () => {
+    setTourOpen(false)
+    if (!state.tourSeen) setState(s => ({ ...s, tourSeen: true }))
+  }
 
   const active = state.profiles.find(p => p.id === state.activeId) || state.profiles[0]
   const stats = useMemo(() => computeStats(active), [active])
@@ -798,6 +911,7 @@ Output exactly this structure in Bulgarian:
         </h1>
         <div className="header-actions">
           <SyncBadge status={syncStatus} lastSavedAt={lastSavedAt} />
+          <button className="btn-ghost" onClick={startTour} title="Как се ползва" aria-label="Помощ"><HelpCircle size={16} /></button>
           <button className="btn-ghost" onClick={exportData} disabled={exporting} title="Експорт в PDF" aria-label="Експорт в PDF">
             {exporting ? <Loader2 size={16} className="spin" /> : <FileDown size={16} />}
           </button>
@@ -899,7 +1013,7 @@ Output exactly this structure in Bulgarian:
           ['compare', 'Сравнение', GitCompare],
           ['insights', 'AI', Brain],
         ].map(([t, label, Icon]) => (
-          <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
+          <button key={t} data-tour={t === 'table' ? 'tab-table' : t === 'compare' ? 'tab-compare' : undefined} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
             <Icon size={14} className="tab-icon" />
             <span className="tab-label">{label}</span>
           </button>
@@ -916,7 +1030,7 @@ Output exactly this structure in Bulgarian:
             newGreen={newGreen} setNewGreen={setNewGreen} addGreen={() => addItem('green', newGreen, setNewGreen)}
             newRed={newRed} setNewRed={setNewRed} addRed={() => addItem('red', newRed, setNewRed)}
           />
-          <section className="results">
+          <section className="results" data-tour="results">
             <Ring value={stats.greenPct} color="var(--green)" label="Зелено" sub={`${stats.greenChecked}/${stats.greenTotal}`} />
             <Ring value={stats.redPct} color="var(--red)" label="Червено" sub={`${stats.redChecked}/${stats.redTotal}`} />
             <Ring value={stats.compat} color="var(--accent)" label="Съвместимост" sub="претеглено" big />
@@ -1088,6 +1202,8 @@ Output exactly this structure in Bulgarian:
       </footer>
 
       <PdfReport profile={active} stats={stats} verdict={verdict} />
+
+      {tourOpen && <Tour steps={TOUR_STEPS} onClose={closeTour} />}
 
       {modal && (
         <div className="modal-bg" onClick={() => setModal(null)}>
@@ -1282,7 +1398,7 @@ function Board({ profile, onRate, onRemove, onUpdate, onMove, addFlag, hasFlag, 
 
 function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, bannerIcon: BannerIcon, columnItems, bannerItems, activeId, onRate, onRemove, onUpdate, addFlag, hasFlag, suggestions, newValue, setNewValue, onAdd }) {
   return (
-    <section className={`side side-${accent}`}>
+    <section className={`side side-${accent}`} data-tour={accent === 'green' ? 'green-col' : 'red-col'}>
       <BannerZone
         accent={accent} zone={bannerZone} title={bannerTitle} Icon={BannerIcon}
         items={bannerItems}
@@ -1302,7 +1418,7 @@ function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, banner
             onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
           />
         ))}
-        <div className="add-row">
+        <div className="add-row" data-tour={accent === 'green' ? 'green-add' : 'red-add'}>
           <input
             type="text" placeholder="Добави нов флаг…" value={newValue}
             onChange={e => setNewValue(e.target.value)}
