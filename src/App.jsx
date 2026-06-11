@@ -25,7 +25,7 @@ import {
   KeyRound, FileDown, Save, Pencil, Plus, X, ChevronDown, ChevronRight,
   GripVertical, Flag, Sparkles, Brain, Flame, BarChart3, Table as TableIcon,
   BookOpen, GitCompare, Check, AlertTriangle, TrendingUp, TrendingDown,
-  Loader2, CloudOff, CloudCheck, Download, Upload, Trash2, Star, ArrowUpDown, Ban, Copy, Eye, EyeOff, Database, HelpCircle,
+  Loader2, CloudOff, CloudCheck, Download, Upload, Trash2, Star, ArrowUpDown, Ban, Copy, Eye, EyeOff, Database, HelpCircle, Palette,
 } from 'lucide-react'
 import './App.css'
 
@@ -57,32 +57,63 @@ const SUGGESTED = {
   green: [
     { f: 'Плаща си сама сметката', m: 'Плаща си сам сметката', category: 'qualities' },
     { f: 'Пита за мнението ми и се вслушва в съветите ми', m: 'Пита за мнението ми и се вслушва в съветите ми', category: 'eq' },
-    { f: 'Признава кога греши и се извинява първа', m: 'Признава кога греши и се извинява първи', category: 'eq' },
-    { f: 'Има доверие — не рови в телефона ми', m: 'Има доверие — не рови в телефона ми', category: 'personal' },
-    { f: 'Говори ме хубаво пред други хора', m: 'Говори ме хубаво пред други хора', category: 'eq' },
+    { f: 'Умее да се извинява и да признава грешките си', m: 'Умее да се извинява и да признава грешките си', category: 'eq' },
+    { f: 'Има доверие - не рови в телефона ми', m: 'Има доверие - не рови в телефона ми', category: 'personal' },
+    { f: 'Говори добре за мен пред другите', m: 'Говори добре за мен пред другите', category: 'eq' },
     { f: 'Не вади стари кавги по време на нов спор', m: 'Не вади стари кавги по време на нов спор', category: 'eq' },
-    { f: 'Финансово отговорна — не живее над възможностите си', m: 'Финансово отговорен — не живее над възможностите си', category: 'qualities' },
+    { f: 'Финансово отговорна - не живее над възможностите си', m: 'Финансово отговорен - не живее над възможностите си', category: 'qualities' },
     { f: 'Уважава времето ми с приятели и семейство', m: 'Уважава времето ми с приятели и семейство', category: 'personal' },
     { f: 'Приема ме такъв, не се опитва да ме „поправя“', m: 'Приема ме такъв, не се опитва да ме „поправя“', category: 'qualities' },
     { f: 'Поема инициатива за планове, не чака само мен', m: 'Поема инициатива за планове, не чака само мен', category: 'personal' },
-    { f: 'Любопитна и се развива — чете, учи, има интереси', m: 'Любопитен и се развива — чете, учи, има интереси', category: 'qualities' },
+    { f: 'Любопитна и се развива - чете, учи, има интереси', m: 'Любопитен и се развива - чете, учи, има интереси', category: 'qualities' },
     { f: 'Спокойна е около мои колежки и приятелки', m: 'Спокоен е около мои колеги и приятели', category: 'eq' },
   ],
   red: [
     { f: 'Синдром на жертвата', m: 'Синдром на жертвата', category: 'qualities' },
     { f: 'Тества ме с игрички и мълчаливи проверки', m: 'Тества ме с игрички и мълчаливи проверки', category: 'eq' },
-    { f: 'Флиртува с други, за да ме ревнува', m: 'Флиртува с други, за да ме ревнува', category: 'personal' },
+    { f: 'Флиртува с други, за да я ревнувам', m: 'Флиртува с други, за да го ревнувам', category: 'personal' },
     { f: 'Сравнява ме с бившите си', m: 'Сравнява ме с бившите си', category: 'eq' },
     { f: 'Заплашва с раздяла при всеки спор', m: 'Заплашва с раздяла при всеки спор', category: 'eq' },
     { f: 'Говори лошо за мен пред приятелките си', m: 'Говори лошо за мен пред приятелите си', category: 'eq' },
     { f: 'Социалните мрежи са ѝ по-важни', m: 'Социалните мрежи са му по-важни', category: 'personal' },
     { f: 'Лъже за дребни неща', m: 'Лъже за дребни неща', category: 'qualities' },
     { f: 'Държи се различно на публично и насаме', m: 'Държи се различно на публично и насаме', category: 'qualities' },
-    { f: 'Прекалено зависима — не може да е сама', m: 'Прекалено зависим — не може да е сам', category: 'personal' },
+    { f: 'Прекалено зависима - не може да е сама', m: 'Прекалено зависим - не може да е сам', category: 'personal' },
+    { f: 'Нужда от външно внимание', m: 'Нужда от външно внимание', category: 'eq' },
     { f: 'Импулсивно харчене / разчита само на мен финансово', m: 'Импулсивно харчене / разчита само на мен финансово', category: 'qualities' },
   ],
 }
+
+// Fuzzy text match so near-duplicates collapse: lowercase, strip punctuation
+// and dashes, then compare via containment or ≥0.7 token overlap (Jaccard).
+const normTxt = (t) => (t || '').toLowerCase().replace(/[„“"().,!?;:/–—-]/g, ' ').replace(/\s+/g, ' ').trim()
+const similarText = (a, b) => {
+  const na = normTxt(a), nb = normTxt(b)
+  if (!na || !nb) return false
+  if (na === nb || na.includes(nb) || nb.includes(na)) return true
+  const ta = new Set(na.split(' ')), tb = new Set(nb.split(' '))
+  let inter = 0
+  for (const w of ta) if (tb.has(w)) inter++
+  return inter / (ta.size + tb.size - inter) >= 0.7
+}
 const genderText = (s, gender) => (gender === 'male' ? s.m : s.f)
+
+// Visual themes: dark (default) + light + three popular palettes.
+const THEMES = [
+  { id: 'dark', label: 'Тъмна', swatch: ['#07070d', '#7b7bff'] },
+  { id: 'light', label: 'Светла', swatch: ['#ffffff', '#5a5fe8'] },
+  { id: 'nord', label: 'Nord', swatch: ['#2e3440', '#88c0d0'] },
+  { id: 'dracula', label: 'Dracula', swatch: ['#282a36', '#bd93f9'] },
+  { id: 'sunset', label: 'Залез', swatch: ['#1b1023', '#ff8e3c'] },
+]
+const THEME_KEY = 'flag-check-theme'
+const loadTheme = () => {
+  try {
+    const t = localStorage.getItem(THEME_KEY)
+    if (THEMES.some(x => x.id === t)) return t
+  } catch {}
+  return 'dark'
+}
 
 // Default left→right order of the editable table's columns (notes last).
 const TABLE_COL_IDS = ['actions', 'color', 'name', 'rating', 'weight', 'points', 'note']
@@ -204,7 +235,7 @@ function computeStats(profile) {
   const greenPct = Math.round((gScore / gMax) * 100)
   const redPct = Math.round((rScore / rMax) * 100)
 
-  // Compatibility — count ONLY rated flags (rating > 0); unrated/empty flags
+  // Compatibility - count ONLY rated flags (rating > 0); unrated/empty flags
   // are excluded from the equation. Blends:
   //   (a) intensityShare = green weighted points / (green + red points)  [70%]
   //   (b) countShare     = # rated green flags / (rated green + red)     [30%]
@@ -218,20 +249,24 @@ function computeStats(profile) {
   const blended = 0.7 * intensityShare + 0.3 * countShare
   const PRIOR_STRENGTH = 4 // "virtual" neutral flags; ~50% confidence at 4 rated flags
   const shrunk = (n * blended + PRIOR_STRENGTH * 0.5) / (n + PRIOR_STRENGTH)
-  const compatRaw = Math.max(0, Math.min(100, Math.round(shrunk * 100)))
+  const compatRaw = Math.max(0, Math.min(100, Math.round((shrunk / 0.85) * 100)))
 
-  // Gates now affect the number itself, not just the banner: every triggered
-  // dealbreaker multiplies the score by 0.55 (a single one nearly halves it);
-  // every unmet must-have by 0.85. Mirrors how the verdict treats them.
+  // Gates affect the number softly: nobody is 100%, so penalties are mild,
+  // diminishing and bounded. Dealbreakers: ×0.85 each, never below ×0.60 total.
+  // Unmet must-haves: ×0.95 each, never below ×0.85 total.
   const triggeredDealbreakers = (profile.dealbreakers || []).filter(i => i.rating > 0).map(i => i.text)
   const unmetMusthaves = (profile.musthaves || []).filter(i => i.rating === 0).map(i => i.text)
-  const DB_PENALTY = 0.55, MH_PENALTY = 0.85
-  const gateFactor = Math.pow(DB_PENALTY, triggeredDealbreakers.length) * Math.pow(MH_PENALTY, unmetMusthaves.length)
-  const compat = Math.max(0, Math.min(100, Math.round(shrunk * gateFactor * 100)))
+  const dbFactor = Math.max(0.60, Math.pow(0.85, triggeredDealbreakers.length))
+  const mhFactor = Math.max(0.85, Math.pow(0.95, unmetMusthaves.length))
+  const gateFactor = dbFactor * mhFactor
+  // Realism stretch: a perfect 100% match doesn't exist, so ~85% green share is
+  // treated as the practical ceiling and the scale is stretched accordingly.
+  const REALISTIC_CEIL = 0.85
+  const compat = Math.max(0, Math.min(100, Math.round((shrunk * gateFactor / REALISTIC_CEIL) * 100)))
   const confidence = Math.round((n / (n + PRIOR_STRENGTH)) * 100)
   const gCount = nG, rCount = nR
 
-  // Per-category green share among rated flags — exposes where it's strong/weak.
+  // Per-category green share among rated flags - exposes where it's strong/weak.
   const categoryScores = CATEGORIES.map(cat => {
     const cg = ratedG.filter(i => i.category === cat.id).reduce((s,i)=>s + itemScore(i), 0)
     const cr = ratedR.filter(i => i.category === cat.id).reduce((s,i)=>s + itemScore(i), 0)
@@ -254,9 +289,9 @@ function computeStats(profile) {
 // Verdict thresholds, surfaced in the UI legend so the bands aren't magic numbers.
 const RED_ALERT_PCT = 40
 const VERDICT_BANDS = [
-  { min: 70, text: '✨ Силен мач — продължи', cls: 'verdict-green' },
-  { min: 50, text: '👀 Обещаващо — наблюдавай', cls: 'verdict-yellow' },
-  { min: 30, text: '⚠️ Смесени сигнали — внимавай', cls: 'verdict-yellow' },
+  { min: 70, text: '✨ Силен мач - продължи', cls: 'verdict-green' },
+  { min: 50, text: '👀 Обещаващо - наблюдавай', cls: 'verdict-yellow' },
+  { min: 30, text: '⚠️ Смесени сигнали - внимавай', cls: 'verdict-yellow' },
   { min: 0,  text: '❌ Ниска съвместимост', cls: 'verdict-red' },
 ]
 
@@ -271,7 +306,7 @@ function trendFor(profile) {
 }
 
 function verdictFor(compat, redPct) {
-  if (redPct >= RED_ALERT_PCT) return { text: '🚩 Прекалено много червени флагове — бягай', cls: 'verdict-red' }
+  if (redPct >= RED_ALERT_PCT) return { text: '🚩 Прекалено много червени флагове - бягай', cls: 'verdict-red' }
   return VERDICT_BANDS.find(b => compat >= b.min) || VERDICT_BANDS[VERDICT_BANDS.length - 1]
 }
 
@@ -324,8 +359,8 @@ function Onboarding({ onChoose }) {
 }
 
 const TOUR_STEPS = [
-  { anchors: ['green-col'], text: 'Тук добави зелен флаг — позитивните неща.' },
-  { anchors: ['red-col'], text: 'Тук добави червен флаг — тревожните сигнали.' },
+  { anchors: ['green-col'], text: 'Тук добави зелен флаг - позитивните неща.' },
+  { anchors: ['red-col'], text: 'Тук добави червен флаг - тревожните сигнали.' },
   { anchors: ['green-add', 'red-add'], text: 'Избери флаг от шаблон или добави свой.' },
   { anchors: ['results'], text: 'Тук виждаш съвместимостта и точките.' },
   { anchors: ['tab-table'], text: 'Разгледай като таблица.' },
@@ -432,6 +467,11 @@ function FlagCheckApp() {
   const [editingProfile, setEditingProfile] = useState(null)
   const [profileDraft, setProfileDraft] = useState('')
   const [tourOpen, setTourOpen] = useState(false)
+  const [theme, setTheme] = useState(loadTheme)
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    try { localStorage.setItem(THEME_KEY, theme) } catch {}
+  }, [theme])
   const [bannerDismissed, setBannerDismissed] = useState(false)
   const [insight, setInsight] = useState({ loading: false, text: '', error: '' })
   const [journalText, setJournalText] = useState('')
@@ -621,11 +661,10 @@ function FlagCheckApp() {
   // all their profiles (harvested at runtime), deduped by text.
   const suggestionsFor = (which) => {
     const out = []
-    const seen = new Set()
     const add = (text, category) => {
-      const key = (text || '').trim().toLowerCase()
-      if (!key || seen.has(key)) return
-      seen.add(key)
+      if (!normTxt(text)) return
+      // Fuzzy dedupe: skip if a near-identical suggestion is already in the pool.
+      if (out.some(s => similarText(s.text, text))) return
       out.push({ text, category })
     }
     ;(SUGGESTED[which] || []).forEach(s => add(genderText(s, state.gender), s.category))
@@ -636,9 +675,8 @@ function FlagCheckApp() {
     return out
   }
   const hasFlag = (which, text) => {
-    const t = text.trim().toLowerCase()
     const lists = which === 'green' ? [active.green, active.musthaves] : [active.red, active.dealbreakers]
-    return lists.some(l => (l || []).some(i => (i.text || '').trim().toLowerCase() === t))
+    return lists.some(l => (l || []).some(i => similarText(i.text, text)))
   }
 
   const addProfile = () => { setModal({ type: 'newProfile' }); setModalInput('') }
@@ -646,7 +684,7 @@ function FlagCheckApp() {
   const renameProfile = () => { setModal({ type: 'renameProfile' }); setModalInput(active?.name || '') }
   const openCopyFrom = () => setModal({ type: 'copyFrom' })
   // Copy all flags from a source profile into the active one, preserving text,
-  // category, weight (but resetting the per-profile rating — same criteria,
+  // category, weight (but resetting the per-profile rating - same criteria,
   // different evaluation). Skips entries with text already in the active list.
   const copyFromProfile = (sourceId) => {
     const source = state.profiles.find(p => p.id === sourceId)
@@ -789,7 +827,7 @@ function FlagCheckApp() {
         alert('Неуспешно четене на файла. Очаква се JSON архив от Flag Check.')
         return
       }
-      if (!norm) { alert('Невалиден архивен файл — няма профили.'); return }
+      if (!norm) { alert('Невалиден архивен файл - няма профили.'); return }
       if (!confirm('Това ще замени текущите профили с тези от архива. Продължи?')) return
       setState(norm)
     }
@@ -853,7 +891,7 @@ function FlagCheckApp() {
   const runInsight = async () => {
     if (!state.apiKey) { setApiKey(); return }
     setInsight({ loading: true, text: '', error: '' })
-    const fmt = (i) => `${i.text} (rating ${i.rating}/5, weight ${i.weight})${i.note ? ' — ' + i.note : ''}`
+    const fmt = (i) => `${i.text} (rating ${i.rating}/5, weight ${i.weight})${i.note ? ' - ' + i.note : ''}`
     const greenAll = [...active.green, ...(active.musthaves || [])]
     const redAll = [...active.red, ...(active.dealbreakers || [])]
     const greenRated = greenAll.filter(i => i.rating > 0).map(fmt)
@@ -881,7 +919,7 @@ Output exactly this structure in Bulgarian:
 ОСНОВЕН РИСК: [едно изречение за най-големия риск]
 НАЙ-СИЛЕН СИГНАЛ: [едно изречение за най-силния позитив]
 ПРОВЕРИ СЛЕДВАЩО: [2 конкретни неща за тестване/наблюдение]
-ПРИСЪДА: [продължи / внимавай / бягай — едно изречение обосновка]`
+ПРИСЪДА: [продължи / внимавай / бягай - едно изречение обосновка]`
 
     try {
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -926,6 +964,7 @@ Output exactly this structure in Bulgarian:
         </h1>
         <div className="header-actions">
           <SyncBadge status={syncStatus} lastSavedAt={lastSavedAt} />
+          <button className="btn-ghost" onClick={() => setModal({ type: 'theme' })} title="Тема" aria-label="Смени темата"><Palette size={16} /></button>
           <button className="btn-ghost" onClick={startTour} title="Как се ползва" aria-label="Помощ"><HelpCircle size={16} /></button>
           <button className="btn-ghost" onClick={exportData} disabled={exporting} title="Експорт в PDF" aria-label="Експорт в PDF">
             {exporting ? <Loader2 size={16} className="spin" /> : <FileDown size={16} />}
@@ -1087,15 +1126,15 @@ Output exactly this structure in Bulgarian:
                   <div className="cat-bar-track">
                     {c.share != null && <div className="cat-bar-fill" style={{ width: `${c.share}%`, background: c.color }} />}
                   </div>
-                  <span className="cat-bar-val">{c.share != null ? `${c.share}%` : '—'}</span>
+                  <span className="cat-bar-val">{c.share != null ? `${c.share}%` : '-'}</span>
                 </div>
               ))}
             </div>
-            <div className="score-breakdown-note">Броят се само оценени флагове (rating&gt;0). Малко данни → резултатът се притегля към 50%. Всяка активна пречка ×0.55, всяко непокрито задължително ×0.85. Лентите показват зеления дял по категория.</div>
+            <div className="score-breakdown-note">Броят се само оценени флагове (rating&gt;0). Малко данни → резултатът се притегля към 50%. Пречка ×0.85 (мин. ×0.60 общо), непокрито задължително ×0.95 (мин. ×0.85). 100% съвместимост не съществува - скалата е разтегната спрямо реалистичен таван 85%. Лентите показват зеления дял по категория.</div>
           </div>
           <div className={`verdict ${verdict.cls}`}>{verdict.text}</div>
           <details className="verdict-legend card">
-            <summary>Как се определя присъдата?</summary>
+            <summary>Как се определя съвместимостта?</summary>
             <ul>
               <li><span className="legend-dot legend-red" />Червено ≥ {RED_ALERT_PCT}% → „бягай“ (има приоритет над всичко)</li>
               {VERDICT_BANDS.map(b => (
@@ -1279,11 +1318,32 @@ Output exactly this structure in Bulgarian:
                 </div>
               </Fragment>
             )}
+            {modal.type === 'theme' && (
+              <Fragment>
+                <h3>Тема</h3>
+                <div className="modal-help">Избери визуален стил. Запазва се на това устройство.</div>
+                <div className="theme-grid">
+                  {THEMES.map(t => (
+                    <button
+                      key={t.id}
+                      className={`theme-option ${theme === t.id ? 'sel' : ''}`}
+                      onClick={() => setTheme(t.id)}
+                    >
+                      <span className="theme-swatch" style={{ background: t.swatch[0] }}>
+                        <span className="theme-swatch-dot" style={{ background: t.swatch[1] }} />
+                      </span>
+                      <span>{t.label}</span>
+                      {theme === t.id && <Check size={14} />}
+                    </button>
+                  ))}
+                </div>
+              </Fragment>
+            )}
             {modal.type === 'copyFrom' && (
               <Fragment>
                 <h3>Копирай флагове в „{active.name}“</h3>
                 <div className="modal-help">
-                  Избери профил — всички зелени и червени флагове (вкл. задължителни и пречки) ще се добавят тук с тяхната тежест. Оценките 1–5 не се копират — попълни ги ръчно за този профил. Повтарящи се текстове се пропускат.
+                  Избери профил - всички зелени и червени флагове (вкл. задължителни и пречки) ще се добавят тук с тяхната тежест. Оценките 1–5 не се копират - попълни ги ръчно за този профил. Повтарящи се текстове се пропускат.
                 </div>
                 <div className="suggest-list">
                   {state.profiles.filter(p => p.id !== active.id).length === 0 ? (
@@ -1326,7 +1386,7 @@ Output exactly this structure in Bulgarian:
               </Fragment>
             )}
             <div className="modal-btns">
-              {(modal.type === 'suggest' || modal.type === 'copyFrom' || modal.type === 'data') ? (
+              {(modal.type === 'suggest' || modal.type === 'copyFrom' || modal.type === 'data' || modal.type === 'theme') ? (
                 <button className="modal-btn modal-btn-primary" onClick={() => setModal(null)}>Готово</button>
               ) : (
                 <Fragment>
@@ -1642,14 +1702,14 @@ function Rating({ accent, value, onChange }) {
             type="button"
             className={`rating-seg ${n <= value ? 'on' : ''}`}
             onClick={() => onChange(n)}
-            aria-label={`${n}/5 — ${labels[n]}`}
+            aria-label={`${n}/5 - ${labels[n]}`}
             title={`${n}/5 · ${labels[n]}`}
           >
             <span className="rating-seg-fill" />
           </button>
         ))}
       </div>
-      <span className="rating-readout">{value > 0 ? `${value}/5` : '—'}</span>
+      <span className="rating-readout">{value > 0 ? `${value}/5` : '-'}</span>
     </div>
   )
 }
@@ -1704,9 +1764,9 @@ function HistoryChart({ history }) {
         ))}
       </svg>
       <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)', justifyContent: 'center', marginTop: 4 }}>
-        <span style={{ color: 'var(--yellow)' }}>— Съвместимост</span>
-        <span style={{ color: 'var(--green)', opacity: 0.7 }}>— Зелено</span>
-        <span style={{ color: 'var(--red)', opacity: 0.7 }}>— Червено</span>
+        <span style={{ color: 'var(--yellow)' }}>- Съвместимост</span>
+        <span style={{ color: 'var(--green)', opacity: 0.7 }}>- Зелено</span>
+        <span style={{ color: 'var(--red)', opacity: 0.7 }}>- Червено</span>
       </div>
     </div>
   )
@@ -1732,7 +1792,7 @@ function CompareView({ a, b }) {
   const lookup = (arr, text) => arr.find(i => i.text === text)
   const cell = (item) => {
     if (!item) return <span>·</span>
-    if (item.rating === 0) return <span>—</span>
+    if (item.rating === 0) return <span>-</span>
     return <span>{item.rating}/5</span>
   }
 
@@ -1789,7 +1849,7 @@ function CompareView({ a, b }) {
           <div className="cs-row"><span>Дял на надмощие</span><strong>{share}% : {100 - share}%</strong></div>
         </div>
         <div className="cs-note">
-          Кръгът показва относителното предимство: (по-висок − по-нисък) / по-нисък × 100 — с колко % единият превъзхожда другия. Разлика = пряко изваждане (процентни пункта). Дял на надмощие = по-висок / (по-висок + по-нисък).
+          Кръгът показва относителното предимство: (по-висок − по-нисък) / по-нисък × 100 - с колко % единият превъзхожда другия. Разлика = пряко изваждане (процентни пункта). Дял на надмощие = по-висок / (по-висок + по-нисък).
         </div>
       </div>
     </div>
@@ -1800,7 +1860,7 @@ function SyncBadge({ status, lastSavedAt }) {
   if (status === 'loading') return <span className="sync-badge sync-loading"><Loader2 size={12} className="spin" /> Зареждам</span>
   if (status === 'saving') return <span className="sync-badge sync-saving"><Loader2 size={12} className="spin" /> Синхронизирам</span>
   if (status === 'conflict') return <span className="sync-badge sync-error" title="Има по-нова версия на сървъра. Избери коя да запазиш от лентата отгоре."><AlertTriangle size={12} /> Конфликт</span>
-  if (status === 'error') return <span className="sync-badge sync-error" title="Промените са в локалния кеш — ще се синхронизират когато се възстанови връзката."><CloudOff size={12} /> Офлайн</span>
+  if (status === 'error') return <span className="sync-badge sync-error" title="Промените са в локалния кеш - ще се синхронизират когато се възстанови връзката."><CloudOff size={12} /> Офлайн</span>
   if (status === 'idle' && lastSavedAt) {
     return <span className="sync-badge sync-saved" title={new Date(lastSavedAt).toLocaleString()}><CloudCheck size={12} /> Автозапазено</span>
   }
@@ -1906,7 +1966,7 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
       label: 'Бележки',
       cell: (item) => (
         <td className="td-note" key="note">
-          <input className="cell-input note-inline" type="text" placeholder="—" value={item.note || ''} onChange={e => onUpdate(item.id, { note: e.target.value })} />
+          <input className="cell-input note-inline" type="text" placeholder="-" value={item.note || ''} onChange={e => onUpdate(item.id, { note: e.target.value })} />
         </td>
       ),
     },
@@ -1970,13 +2030,9 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
                     <span className="guide-max">макс +{stats.gMax}</span>
                   </div>
                   <div className="total-right">
-                    <div className="total-line">
-                      <span className="total-label">Общ брой точки</span>
-                      <span className={`total-points ${net >= tExc ? 'lvl-exc' : net >= tGood ? 'lvl-good' : net >= tAvg ? 'lvl-avg' : 'lvl-low'}`}>{net}</span>
-                    </div>
-                    <div className="total-sub">
-                      <span style={{ color: 'var(--green)' }}>{stats.gScore} зелени</span> − <span style={{ color: 'var(--red)' }}>{stats.rScore} червени</span> = {net}
-                    </div>
+                    <span className="total-parens">(<span style={{ color: 'var(--green)' }}>+{stats.gScore}</span> / <span style={{ color: 'var(--red)' }}>−{stats.rScore}</span>)</span>
+                    <span className="total-label">Общ брой точки</span>
+                    <span className={`total-points ${net >= tExc ? 'lvl-exc' : net >= tGood ? 'lvl-good' : net >= tAvg ? 'lvl-avg' : 'lvl-low'}`}>{net}</span>
                   </div>
                 </div>
               </td>
@@ -1984,7 +2040,50 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
           </tfoot>
         </table>
       </div>
+      <PointsPie gScore={stats.gScore} rScore={stats.rScore} />
     </section>
+  )
+}
+
+// Donut of green vs red points with a dashed marker at the "good result"
+// boundary: green should hold ≥70% of all collected points.
+function PointsPie({ gScore, rScore }) {
+  const total = gScore + rScore
+  const size = 180, stroke = 26
+  const r = (size - stroke) / 2
+  const c = 2 * Math.PI * r
+  const gFrac = total > 0 ? gScore / total : 0
+  const GOOD = 0.7
+  const markerAngle = GOOD * 360 - 90
+  const mx1 = size / 2 + (r - stroke / 2 - 4) * Math.cos(markerAngle * Math.PI / 180)
+  const my1 = size / 2 + (r - stroke / 2 - 4) * Math.sin(markerAngle * Math.PI / 180)
+  const mx2 = size / 2 + (r + stroke / 2 + 6) * Math.cos(markerAngle * Math.PI / 180)
+  const my2 = size / 2 + (r + stroke / 2 + 6) * Math.sin(markerAngle * Math.PI / 180)
+  return (
+    <div className="points-pie">
+      <svg width={size} height={size}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--red)" strokeWidth={stroke} opacity={total > 0 ? 0.85 : 0.15} />
+        {total > 0 && (
+          <circle
+            cx={size/2} cy={size/2} r={r}
+            fill="none" stroke="var(--green)" strokeWidth={stroke}
+            strokeDasharray={`${gFrac * c} ${c}`}
+            transform={`rotate(-90 ${size/2} ${size/2})`}
+            style={{ transition: 'stroke-dasharray 0.5s ease' }}
+          />
+        )}
+        <line x1={mx1} y1={my1} x2={mx2} y2={my2} stroke="var(--text)" strokeWidth="2" strokeDasharray="4 4" />
+        <text x="50%" y="46%" textAnchor="middle" fill="var(--text)" fontSize="22" fontWeight="700">
+          {total > 0 ? `${Math.round(gFrac * 100)}%` : '-'}
+        </text>
+        <text x="50%" y="60%" textAnchor="middle" fill="var(--muted)" fontSize="10">зелен дял</text>
+      </svg>
+      <div className="points-pie-legend">
+        <span className="ppl-item"><span className="ppl-dot" style={{ background: 'var(--green)' }} /> Зелени точки: {gScore}</span>
+        <span className="ppl-item"><span className="ppl-dot" style={{ background: 'var(--red)' }} /> Червени точки: {rScore}</span>
+        <span className="ppl-item"><span className="ppl-dash" /> Граница за добър резултат: ≥ 70% зелено</span>
+      </div>
+    </div>
   )
 }
 
@@ -2076,13 +2175,13 @@ function PdfReport({ profile, stats, verdict }) {
         {item.text}{item._tag ? ` ${item._tag}` : ''}
       </td>
       <td style={{ padding: '6px 8px', borderBottom: '1px solid #2a2a2e', textAlign: 'center', fontWeight: 600 }}>
-        {item.rating > 0 ? `${item.rating}/5` : '—'}
+        {item.rating > 0 ? `${item.rating}/5` : '-'}
       </td>
       <td style={{ padding: '6px 8px', borderBottom: '1px solid #2a2a2e', textAlign: 'center', color: '#a0a0a8' }}>
         {item.weight || 2}
       </td>
       <td style={{ padding: '6px 8px', borderBottom: '1px solid #2a2a2e', color: '#a0a0a8', fontSize: 11 }}>
-        {item.note || '—'}
+        {item.note || '-'}
       </td>
     </tr>
   )

@@ -1470,3 +1470,35 @@
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation-duration: 0.001ms !important; }
 }
+
+/* v5.1 — theme picker, breakdown padding, table footer, points pie */
+.score-breakdown.card { padding-top: 16px; }
+
+.theme-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.theme-option {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--panel-2); border: 1px solid var(--border);
+  font-size: 14px; font-weight: 600; color: var(--text);
+}
+.theme-option.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.theme-option > svg { margin-left: auto; color: var(--accent); }
+.theme-swatch {
+  width: 34px; height: 24px; border-radius: 6px; border: 1px solid var(--border);
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.theme-swatch-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.total-parens { font-size: 13px; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+.total-right { align-items: center; }
+.total-points { font-size: 26px; }
+
+.points-pie {
+  display: flex; align-items: center; justify-content: center; gap: 24px;
+  flex-wrap: wrap; padding: 18px 10px 8px; margin-top: 6px;
+  border-top: 1px solid var(--divider);
+}
+.points-pie-legend { display: flex; flex-direction: column; gap: 8px; }
+.ppl-item { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
+.ppl-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.ppl-dash { width: 18px; border-top: 2px dashed var(--text); flex-shrink: 0; }
