@@ -217,18 +217,33 @@ function computeStats(profile) {
   const countShare = (nG + nR) > 0 ? nG / (nG + nR) : 0.5
   const blended = 0.7 * intensityShare + 0.3 * countShare
   const PRIOR_STRENGTH = 4 // "virtual" neutral flags; ~50% confidence at 4 rated flags
-  const compat01 = (n * blended + PRIOR_STRENGTH * 0.5) / (n + PRIOR_STRENGTH)
-  const compat = Math.max(0, Math.min(100, Math.round(compat01 * 100)))
+  const shrunk = (n * blended + PRIOR_STRENGTH * 0.5) / (n + PRIOR_STRENGTH)
+  const compatRaw = Math.max(0, Math.min(100, Math.round(shrunk * 100)))
+
+  // Gates now affect the number itself, not just the banner: every triggered
+  // dealbreaker multiplies the score by 0.55 (a single one nearly halves it);
+  // every unmet must-have by 0.85. Mirrors how the verdict treats them.
+  const triggeredDealbreakers = (profile.dealbreakers || []).filter(i => i.rating > 0).map(i => i.text)
+  const unmetMusthaves = (profile.musthaves || []).filter(i => i.rating === 0).map(i => i.text)
+  const DB_PENALTY = 0.55, MH_PENALTY = 0.85
+  const gateFactor = Math.pow(DB_PENALTY, triggeredDealbreakers.length) * Math.pow(MH_PENALTY, unmetMusthaves.length)
+  const compat = Math.max(0, Math.min(100, Math.round(shrunk * gateFactor * 100)))
   const confidence = Math.round((n / (n + PRIOR_STRENGTH)) * 100)
   const gCount = nG, rCount = nR
 
-  // Gates: triggered dealbreakers (present red) and unmet must-haves (absent green).
-  const triggeredDealbreakers = (profile.dealbreakers || []).filter(i => i.rating > 0).map(i => i.text)
-  const unmetMusthaves = (profile.musthaves || []).filter(i => i.rating === 0).map(i => i.text)
+  // Per-category green share among rated flags — exposes where it's strong/weak.
+  const categoryScores = CATEGORIES.map(cat => {
+    const cg = ratedG.filter(i => i.category === cat.id).reduce((s,i)=>s + itemScore(i), 0)
+    const cr = ratedR.filter(i => i.category === cat.id).reduce((s,i)=>s + itemScore(i), 0)
+    const rated = ratedG.filter(i => i.category === cat.id).length + ratedR.filter(i => i.category === cat.id).length
+    return { ...cat, share: (cg + cr) > 0 ? Math.round((cg / (cg + cr)) * 100) : null, rated }
+  })
+
   return {
     greenChecked: g.filter(i=>i.rating > 0).length, greenTotal: g.length,
     redChecked: r.filter(i=>i.rating > 0).length, redTotal: r.length,
-    greenPct, redPct, compat, confidence, ratedCount: n, triggeredDealbreakers, unmetMusthaves,
+    greenPct, redPct, compat, compatRaw, gateFactor, confidence, ratedCount: n,
+    triggeredDealbreakers, unmetMusthaves, categoryScores,
     intensityShare: Math.round(intensityShare * 100), countShare: Math.round(countShare * 100),
     gCount, rCount,
     // Weighted-point breakdown so the compatibility number is transparent.
@@ -1056,10 +1071,27 @@ Output exactly this structure in Bulgarian:
               <span>Увереност ({stats.ratedCount} оценени)</span>
               <span>{stats.confidence}% <span style={{ color: 'var(--muted)' }}>· тегли към 50% при малко данни</span></span>
             </div>
+            {stats.gateFactor < 1 && (
+              <div className="score-breakdown-row gate-row">
+                <span>Наказание от пречки/задължителни</span>
+                <span><strong style={{ color: 'var(--red)' }}>×{stats.gateFactor.toFixed(2)}</strong> <span style={{ color: 'var(--muted)' }}>· {stats.compatRaw}% → {stats.compat}%</span></span>
+              </div>
+            )}
             <div className="score-breakdown-formula">
               Съвместимост = <strong>{stats.compat}%</strong>
             </div>
-            <div className="score-breakdown-note">Броят се само оценени флагове (rating&gt;0). Малко данни → резултатът се притегля към неутрални 50% (Bayesian среднопретегляне).</div>
+            <div className="cat-bars">
+              {stats.categoryScores.map(c => (
+                <div className="cat-bar-row" key={c.id}>
+                  <span className="cat-bar-label">{c.icon} {c.label}</span>
+                  <div className="cat-bar-track">
+                    {c.share != null && <div className="cat-bar-fill" style={{ width: `${c.share}%`, background: c.color }} />}
+                  </div>
+                  <span className="cat-bar-val">{c.share != null ? `${c.share}%` : '—'}</span>
+                </div>
+              ))}
+            </div>
+            <div className="score-breakdown-note">Броят се само оценени флагове (rating&gt;0). Малко данни → резултатът се притегля към 50%. Всяка активна пречка ×0.55, всяко непокрито задължително ×0.85. Лентите показват зеления дял по категория.</div>
           </div>
           <div className={`verdict ${verdict.cls}`}>{verdict.text}</div>
           <details className="verdict-legend card">
