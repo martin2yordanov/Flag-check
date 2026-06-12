@@ -1,0 +1,12 @@
+{
+  "appId": "bg.fathers.flagcheck",
+  "appName": "Flag Check",
+  "webDir": "dist",
+  "server": {
+    "url": "https://flag-check-five.vercel.app",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "always"
+  }
+}
