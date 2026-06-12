@@ -1079,8 +1079,7 @@ Output exactly this structure in Bulgarian:
           <Board
             profile={active}
             onRate={setRating} onRemove={removeItem} onUpdate={updateItem} onMove={moveItem}
-            addFlag={addFlag} hasFlag={hasFlag}
-            suggestGreen={suggestionsFor('green')} suggestRed={suggestionsFor('red')}
+            onSuggest={(which) => setModal({ type: 'suggest', which })}
             newGreen={newGreen} setNewGreen={setNewGreen} addGreen={() => addItem('green', newGreen, setNewGreen)}
             newRed={newRed} setNewRed={setNewRed} addRed={() => addItem('red', newRed, setNewRed)}
           />
@@ -1304,6 +1303,17 @@ Output exactly this structure in Bulgarian:
                 />
               </Fragment>
             )}
+            {modal.type === 'suggest' && (
+              <Fragment>
+                <h3>{modal.which === 'red' ? '🔴 Готови червени флагове' : '🟢 Готови зелени флагове'}</h3>
+                <div className="modal-help">Докосни флаг, за да го добавиш към „{active.name}“.</div>
+                <SuggestBox
+                  accent={modal.which} which={modal.which}
+                  suggestions={suggestionsFor(modal.which)}
+                  addFlag={addFlag} hasFlag={hasFlag}
+                />
+              </Fragment>
+            )}
             {modal.type === 'data' && (
               <Fragment>
                 <h3>Архив (JSON)</h3>
@@ -1404,7 +1414,7 @@ Output exactly this structure in Bulgarian:
 
 // One DndContext spanning both colours so items can be dragged between
 // green/red columns and the must-have/dealbreaker banners.
-function Board({ profile, onRate, onRemove, onUpdate, onMove, addFlag, hasFlag, suggestGreen, suggestRed, newGreen, setNewGreen, addGreen, newRed, setNewRed, addRed }) {
+function Board({ profile, onRate, onRemove, onUpdate, onMove, onSuggest, newGreen, setNewGreen, addGreen, newRed, setNewRed, addRed }) {
   const [activeId, setActiveId] = useState(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -1462,8 +1472,7 @@ function Board({ profile, onRate, onRemove, onUpdate, onMove, addFlag, hasFlag, 
           columnTitle="Зелени флагове" bannerTitle="Задължителни" bannerIcon={Star}
           columnItems={profile.green} bannerItems={profile.musthaves || []}
           activeId={activeId}
-          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
-          addFlag={addFlag} hasFlag={hasFlag} suggestions={suggestGreen}
+          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} onSuggest={onSuggest}
           newValue={newGreen} setNewValue={setNewGreen} onAdd={addGreen}
         />
         <BoardSide
@@ -1471,8 +1480,7 @@ function Board({ profile, onRate, onRemove, onUpdate, onMove, addFlag, hasFlag, 
           columnTitle="Червени флагове" bannerTitle="Dealbreakers (пречки)" bannerIcon={Ban}
           columnItems={profile.red} bannerItems={profile.dealbreakers || []}
           activeId={activeId}
-          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate}
-          addFlag={addFlag} hasFlag={hasFlag} suggestions={suggestRed}
+          onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} onSuggest={onSuggest}
           newValue={newRed} setNewValue={setNewRed} onAdd={addRed}
         />
       </main>
@@ -1488,7 +1496,7 @@ function Board({ profile, onRate, onRemove, onUpdate, onMove, addFlag, hasFlag, 
   )
 }
 
-function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, bannerIcon: BannerIcon, columnItems, bannerItems, activeId, onRate, onRemove, onUpdate, addFlag, hasFlag, suggestions, newValue, setNewValue, onAdd }) {
+function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, bannerIcon: BannerIcon, columnItems, bannerItems, activeId, onRate, onRemove, onUpdate, onSuggest, newValue, setNewValue, onAdd }) {
   return (
     <section className={`side side-${accent}`} data-tour={accent === 'green' ? 'green-col' : 'red-col'}>
       <BannerZone
@@ -1517,8 +1525,8 @@ function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, banner
             onKeyDown={e => { if (e.key === 'Enter') onAdd() }}
           />
           <button className={`add-btn add-btn-${accent}`} onClick={onAdd} title="Добави нов флаг" aria-label="Добави нов флаг"><Plus size={16} /></button>
+          <button className={`add-btn add-btn-suggest add-suggest-${accent}`} onClick={() => onSuggest(which)} title="Избери готов флаг" aria-label="Готови флагове"><Sparkles size={16} /></button>
         </div>
-        <SuggestBox accent={accent} which={which} suggestions={suggestions} addFlag={addFlag} hasFlag={hasFlag} />
       </div>
     </section>
   )
