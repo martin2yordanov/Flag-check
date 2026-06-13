@@ -934,7 +934,7 @@
   align-items: start;
   margin-bottom: 20px;
 }
-.side { display: flex; flex-direction: column; gap: 12px; }
+.side { display: flex; flex-direction: column; gap: 24px; }
 @media (max-width: 720px) { .board { grid-template-columns: 1fr; } }
 
 .board-banner {
