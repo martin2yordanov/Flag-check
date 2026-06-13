@@ -307,9 +307,11 @@ function computeStats(profile) {
   // each, never below ×0.85 total.
   const triggeredDealbreakers = (profile.dealbreakers || []).filter(i => i.rating > 0).map(i => i.text)
   const unmetMusthaves = (profile.musthaves || []).filter(i => i.rating === 0).map(i => i.text)
-  const dbFactor = Math.max(0.60, Math.pow(0.85, triggeredDealbreakers.length))
-  const mhFactor = Math.max(0.85, Math.pow(0.95, unmetMusthaves.length))
-  const gateFactor = dbFactor * mhFactor
+  // Only TRIGGERED dealbreakers reduce the score, gently and bounded: ×0.90 each,
+  // never below ×0.70 total. Unmet must-haves are NOT penalised (rating 0 just
+  // means "not evaluated yet") — they stay an informational warning only.
+  const dbFactor = Math.max(0.70, Math.pow(0.90, triggeredDealbreakers.length))
+  const gateFactor = dbFactor
   const compat = Math.max(0, Math.min(100, Math.round(shrunk * gateFactor * 100)))
   const confidence = Math.round((n / (n + PRIOR_STRENGTH)) * 100)
   const gCount = nG, rCount = nR
@@ -1152,11 +1154,11 @@ Output exactly this structure in Bulgarian:
             </div>
             <div className="score-breakdown-row">
               <span>Интензитет (зелено дял)</span>
-              <span>{stats.intensityShare}% <span style={{ color: 'var(--muted)' }}>· тегло 70%</span></span>
+              <span>{stats.intensityShare}% <span style={{ color: 'var(--muted)' }}>· тегло 85%</span></span>
             </div>
             <div className="score-breakdown-row">
               <span>Баланс по брой (зелено дял)</span>
-              <span>{stats.countShare}% <span style={{ color: 'var(--muted)' }}>· тегло 30%</span></span>
+              <span>{stats.countShare}% <span style={{ color: 'var(--muted)' }}>· тегло 15%</span></span>
             </div>
             <div className="score-breakdown-row">
               <span>Увереност ({stats.ratedCount} оценени)</span>
@@ -1164,7 +1166,7 @@ Output exactly this structure in Bulgarian:
             </div>
             {stats.gateFactor < 1 && (
               <div className="score-breakdown-row gate-row">
-                <span>Наказание от пречки/задължителни</span>
+                <span>Наказание от активни пречки</span>
                 <span><strong style={{ color: 'var(--red)' }}>×{stats.gateFactor.toFixed(2)}</strong> <span style={{ color: 'var(--muted)' }}>· {stats.compatRaw}% → {stats.compat}%</span></span>
               </div>
             )}
@@ -1182,7 +1184,7 @@ Output exactly this structure in Bulgarian:
                 </div>
               ))}
             </div>
-            <div className="score-breakdown-note">Формула по Gottman (5:1): лог-съотношение на зелени към червени точки - 5:1 ≈ 86%, 1:1 = 50%. „Никой не е перфектен“: +8% виртуални червени, така че таванът е ~94%. Малко данни → притегляне към 50%. Пречка ×0.85 (мин. ×0.60), непокрито задължително ×0.95 (мин. ×0.85).</div>
+            <div className="score-breakdown-note">Формула по Gottman (5:1): лог-съотношение на зелени към червени точки - 5:1 ≈ 86%, 1:1 = 50%. „Никой не е перфектен“: +8% виртуални червени, таван ~94%. Малко данни → притегляне към 50%. Само активна пречка сваля резултата (×0.90 всяка, мин. ×0.70). Непокритите задължителни са само предупреждение, не наказват.</div>
           </div>
           <div className={`verdict ${verdict.cls}`}>{verdict.text}</div>
           <details className="verdict-legend card">
