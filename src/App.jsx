@@ -264,18 +264,24 @@ function loadLocal(userId) {
 // Each flag contributes rating × per-item weight (1-3).
 const itemScore = (i) => i.rating * (i.weight || 2)
 const itemMax = (i) => 5 * (i.weight || 2)
+// Must-haves and dealbreakers are higher-stakes criteria, so their weight counts
+// for 1.5× in the green/red point ratio (decision-theory: critical criteria carry
+// more weight in the compensatory part, on top of the dealbreaker gate).
+const SPECIAL_MULT = 1.5
+const itemPoints = (i, special) => itemScore(i) * (special ? SPECIAL_MULT : 1)
+const itemPointsMax = (i, special) => itemMax(i) * (special ? SPECIAL_MULT : 1)
 
 // Stable sort by weight desc (3 on top → 1 at bottom); equal weights keep their
 // manual (array) order, so manual reordering within a weight group is preserved.
 const byWeightDesc = (items) => [...items].sort((a, b) => (b.weight || 2) - (a.weight || 2))
 
 function computeStats(profile) {
-  const g = [...(profile.green || []), ...(profile.musthaves || [])]
-  const r = [...(profile.red || []), ...(profile.dealbreakers || [])]
-  const gMax = g.reduce((s,i)=>s + itemMax(i), 0) || 1
-  const gScore = g.reduce((s,i)=>s + itemScore(i), 0)
-  const rMax = r.reduce((s,i)=>s + itemMax(i), 0) || 1
-  const rScore = r.reduce((s,i)=>s + itemScore(i), 0)
+  const g = [...(profile.green || []).map(i => ({ ...i, _sp: false })), ...(profile.musthaves || []).map(i => ({ ...i, _sp: true }))]
+  const r = [...(profile.red || []).map(i => ({ ...i, _sp: false })), ...(profile.dealbreakers || []).map(i => ({ ...i, _sp: true }))]
+  const gMax = g.reduce((s,i)=>s + itemPointsMax(i, i._sp), 0) || 1
+  const gScore = g.reduce((s,i)=>s + itemPoints(i, i._sp), 0)
+  const rMax = r.reduce((s,i)=>s + itemPointsMax(i, i._sp), 0) || 1
+  const rScore = r.reduce((s,i)=>s + itemPoints(i, i._sp), 0)
   const greenPct = Math.round((gScore / gMax) * 100)
   const redPct = Math.round((rScore / rMax) * 100)
 
@@ -319,8 +325,8 @@ function computeStats(profile) {
 
   // Per-category green share among rated flags - exposes where it's strong/weak.
   const categoryScores = CATEGORIES.map(cat => {
-    const cg = ratedG.filter(i => i.category === cat.id).reduce((s,i)=>s + itemScore(i), 0)
-    const cr = ratedR.filter(i => i.category === cat.id).reduce((s,i)=>s + itemScore(i), 0)
+    const cg = ratedG.filter(i => i.category === cat.id).reduce((s,i)=>s + itemPoints(i, i._sp), 0)
+    const cr = ratedR.filter(i => i.category === cat.id).reduce((s,i)=>s + itemPoints(i, i._sp), 0)
     const rated = ratedG.filter(i => i.category === cat.id).length + ratedR.filter(i => i.category === cat.id).length
     return { ...cat, share: (cg + cr) > 0 ? Math.round((cg / (cg + cr)) * 100) : null, rated }
   })
@@ -332,8 +338,8 @@ function computeStats(profile) {
     triggeredDealbreakers, unmetMusthaves, categoryScores,
     intensityShare: Math.round(intensityShare * 100), countShare: Math.round(countShare * 100),
     gCount, rCount,
-    // Weighted-point breakdown so the compatibility number is transparent.
-    gScore, gMax, rScore, rMax,
+    // Weighted-point breakdown so the compatibility number is transparent (rounded for display).
+    gScore: Math.round(gScore), gMax: Math.round(gMax), rScore: Math.round(rScore), rMax: Math.round(rMax),
   }
 }
 
@@ -1954,11 +1960,12 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
     return list
   }, [profile])
 
+  const rowPts = (i) => itemPoints(i, i.kind === 'musthave' || i.kind === 'dealbreaker')
   const sorters = {
     name: (a, b) => a.text.localeCompare(b.text, 'bg'),
     rating: (a, b) => a.rating - b.rating,
     weight: (a, b) => (a.weight || 2) - (b.weight || 2),
-    points: (a, b) => itemScore(a) - itemScore(b),
+    points: (a, b) => rowPts(a) - rowPts(b),
     color: (a, b) => (a.color === 'green' ? -1 : 1),
   }
   const orderIdx = (id) => { const k = manualOrder.indexOf(id); return k === -1 ? Number.MAX_SAFE_INTEGER : k }
@@ -1966,7 +1973,7 @@ function FlagsTable({ profile, onUpdate, onRate, onRemove }) {
   const rows = [...visible].sort((a, b) => {
     if (sort.key !== 'default') return sorters[sort.key](a, b) * sort.dir
     // Auto: by points (weight×rating) desc, then manual order, then weight & rating.
-    return (itemScore(b) - itemScore(a))
+    return (rowPts(b) - rowPts(a))
       || (orderIdx(a.id) - orderIdx(b.id))
       || ((b.weight || 2) - (a.weight || 2))
       || (b.rating - a.rating)
@@ -2163,7 +2170,8 @@ function TableRow({ item, orderedIds, COLS, onRemove }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
   const [confirmDel, setConfirmDel] = useState(false)
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
-  const score = itemScore(item)
+  const special = item.kind === 'musthave' || item.kind === 'dealbreaker'
+  const score = itemPoints(item, special)
   const sign = score === 0 ? '' : (item.color === 'red' ? '−' : '+')
   return (
     <tr ref={setNodeRef} style={style} className={`tr-${item.color}`}>
@@ -2187,7 +2195,7 @@ function TableRow({ item, orderedIds, COLS, onRemove }) {
             <td className={`td-points td-points-${item.color}`} key="points">
               <span className="points-cell">
                 <button className="row-grip" {...attributes} {...listeners} title="Влачи за подреждане" aria-label="Подреди"><GripVertical size={12} /></button>
-                <span>{sign}{score}</span>
+                <span>{sign}{Math.round(score)}</span>
               </span>
             </td>
           )
