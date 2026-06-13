@@ -939,14 +939,13 @@
 
 .board-banner {
   background: var(--panel);
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--panel-3);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 12px 8px;
-  transition: outline 0.15s, background 0.15s;
+  transition: outline 0.15s, background 0.15s, border-color 0.15s;
 }
-.board-banner-green { border-top-color: var(--green); }
-.board-banner-red { border-top-color: var(--red); }
+.board-banner-green { border-color: var(--green); }
+.board-banner-red { border-color: var(--red); }
 .board-banner-head {
   display: flex; align-items: center; gap: 7px;
   font-size: 11px; font-weight: 700; text-transform: uppercase;
