@@ -106,6 +106,50 @@ const THEMES = [
   { id: 'dracula', label: 'Dracula', swatch: ['#282a36', '#bd93f9'] },
   { id: 'sunset', label: 'Залез', swatch: ['#1b1023', '#ff8e3c'] },
 ]
+// UI languages (visible chrome; flag texts stay as entered by the user).
+const LANGS = [
+  { id: 'bg', label: 'Български' },
+  { id: 'en', label: 'English' },
+  { id: 'es', label: 'Español' },
+]
+const I18N = {
+  bg: {
+    tabFlags: 'Флагове', tabTable: 'Таблица', tabJournal: 'Дневник', tabCompare: 'Сравнение', tabAI: 'AI',
+    greenCol: 'Зелени флагове', redCol: 'Червени флагове', musthaves: 'Задължителни', dealbreakers: 'Dealbreakers (пречки)',
+    addPlaceholder: 'Добави нов флаг…', green: 'Зелено', red: 'Червено', compat: 'Съвместимост', weighted: 'претеглено',
+    obTitle: 'Добре дошъл във Flag Check', obQ: 'Кого ще оценяваш? Това нагласява езика и предложенията.',
+    obF: 'Оценявам жени', obM: 'Оценявам мъже', obNote: 'Това нагласява само езика на предложенията.',
+    sgGreen: 'Зелени предложения', sgRed: 'Червени предложения', showAdded: 'Покажи добавените', hideAdded: 'Скрий добавените', noNew: 'Няма нови предложения.',
+    vRun: '🚩 Прекалено много червени флагове - бягай', v70: '✨ Силен мач - продължи', v50: '👀 Обещаващо - наблюдавай', v30: '⚠️ Смесени сигнали - внимавай', v0: '❌ Ниска съвместимост',
+    themeLang: 'Тема и език', language: 'Език',
+  },
+  en: {
+    tabFlags: 'Flags', tabTable: 'Table', tabJournal: 'Journal', tabCompare: 'Compare', tabAI: 'AI',
+    greenCol: 'Green flags', redCol: 'Red flags', musthaves: 'Must-haves', dealbreakers: 'Dealbreakers',
+    addPlaceholder: 'Add a new flag…', green: 'Green', red: 'Red', compat: 'Compatibility', weighted: 'weighted',
+    obTitle: 'Welcome to Flag Check', obQ: 'Who will you be evaluating? This tunes wording and suggestions.',
+    obF: 'I evaluate women', obM: 'I evaluate men', obNote: 'This only affects suggestion wording.',
+    sgGreen: 'Green suggestions', sgRed: 'Red suggestions', showAdded: 'Show added', hideAdded: 'Hide added', noNew: 'No new suggestions.',
+    vRun: '🚩 Too many red flags - run', v70: '✨ Strong match - keep going', v50: '👀 Promising - keep watching', v30: '⚠️ Mixed signals - be careful', v0: '❌ Low compatibility',
+    themeLang: 'Theme & language', language: 'Language',
+  },
+  es: {
+    tabFlags: 'Banderas', tabTable: 'Tabla', tabJournal: 'Diario', tabCompare: 'Comparar', tabAI: 'IA',
+    greenCol: 'Banderas verdes', redCol: 'Banderas rojas', musthaves: 'Imprescindibles', dealbreakers: 'Líneas rojas',
+    addPlaceholder: 'Añade una bandera…', green: 'Verde', red: 'Rojo', compat: 'Compatibilidad', weighted: 'ponderado',
+    obTitle: 'Bienvenido a Flag Check', obQ: '¿A quién vas a evaluar? Esto ajusta el lenguaje y las sugerencias.',
+    obF: 'Evalúo mujeres', obM: 'Evalúo hombres', obNote: 'Solo afecta al lenguaje de las sugerencias.',
+    sgGreen: 'Sugerencias verdes', sgRed: 'Sugerencias rojas', showAdded: 'Mostrar añadidas', hideAdded: 'Ocultar añadidas', noNew: 'No hay sugerencias nuevas.',
+    vRun: '🚩 Demasiadas banderas rojas - huye', v70: '✨ Gran match - sigue', v50: '👀 Prometedor - observa', v30: '⚠️ Señales mixtas - cuidado', v0: '❌ Baja compatibilidad',
+    themeLang: 'Tema e idioma', language: 'Idioma',
+  },
+}
+const LANG_KEY = 'flag-check-lang'
+const loadLang = () => {
+  try { const l = localStorage.getItem(LANG_KEY); if (I18N[l]) return l } catch {}
+  return 'bg'
+}
+
 const THEME_KEY = 'flag-check-theme'
 const loadTheme = () => {
   try {
@@ -244,27 +288,32 @@ function computeStats(profile) {
   const ratedG = g.filter(i => i.rating > 0)
   const ratedR = r.filter(i => i.rating > 0)
   const nG = ratedG.length, nR = ratedR.length, n = nG + nR
-  const intensityShare = (gScore + rScore) > 0 ? gScore / (gScore + rScore) : 0.5
   const countShare = (nG + nR) > 0 ? nG / (nG + nR) : 0.5
-  const blended = 0.7 * intensityShare + 0.3 * countShare
-  const PRIOR_STRENGTH = 4 // "virtual" neutral flags; ~50% confidence at 4 rated flags
+  // Core: log-odds (Bradley–Terry) curve on weighted points, anchored to
+  // Gottman's 5:1 positivity ratio research — G:R of 5:1 ≈ 86%, 1:1 = 50%,
+  // 2:1 ≈ 69%. The "nobody is perfect" prior adds 8% virtual red points, so
+  // even an all-green profile tops out around ~94% (100% doesn't exist).
+  const K = 1.15
+  const Geff = gScore
+  const Reff = rScore + 0.08 * gScore + 1
+  const core = Geff > 0 ? Math.pow(Geff, K) / (Math.pow(Geff, K) + Math.pow(Reff, K)) : 0.5
+  const blended = 0.85 * core + 0.15 * countShare
+  const PRIOR_STRENGTH = 3 // "virtual" neutral flags; mild pull to 50% on thin data
   const shrunk = (n * blended + PRIOR_STRENGTH * 0.5) / (n + PRIOR_STRENGTH)
-  const compatRaw = Math.max(0, Math.min(100, Math.round((shrunk / 0.85) * 100)))
+  const compatRaw = Math.max(0, Math.min(100, Math.round(shrunk * 100)))
 
-  // Gates affect the number softly: nobody is 100%, so penalties are mild,
-  // diminishing and bounded. Dealbreakers: ×0.85 each, never below ×0.60 total.
-  // Unmet must-haves: ×0.95 each, never below ×0.85 total.
+  // Gates affect the number softly: penalties are mild, diminishing and bounded.
+  // Dealbreakers: ×0.85 each, never below ×0.60 total. Unmet must-haves: ×0.95
+  // each, never below ×0.85 total.
   const triggeredDealbreakers = (profile.dealbreakers || []).filter(i => i.rating > 0).map(i => i.text)
   const unmetMusthaves = (profile.musthaves || []).filter(i => i.rating === 0).map(i => i.text)
   const dbFactor = Math.max(0.60, Math.pow(0.85, triggeredDealbreakers.length))
   const mhFactor = Math.max(0.85, Math.pow(0.95, unmetMusthaves.length))
   const gateFactor = dbFactor * mhFactor
-  // Realism stretch: a perfect 100% match doesn't exist, so ~85% green share is
-  // treated as the practical ceiling and the scale is stretched accordingly.
-  const REALISTIC_CEIL = 0.85
-  const compat = Math.max(0, Math.min(100, Math.round((shrunk * gateFactor / REALISTIC_CEIL) * 100)))
+  const compat = Math.max(0, Math.min(100, Math.round(shrunk * gateFactor * 100)))
   const confidence = Math.round((n / (n + PRIOR_STRENGTH)) * 100)
   const gCount = nG, rCount = nR
+  const intensityShare = core
 
   // Per-category green share among rated flags - exposes where it's strong/weak.
   const categoryScores = CATEGORIES.map(cat => {
@@ -289,10 +338,10 @@ function computeStats(profile) {
 // Verdict thresholds, surfaced in the UI legend so the bands aren't magic numbers.
 const RED_ALERT_PCT = 40
 const VERDICT_BANDS = [
-  { min: 70, text: '✨ Силен мач - продължи', cls: 'verdict-green' },
-  { min: 50, text: '👀 Обещаващо - наблюдавай', cls: 'verdict-yellow' },
-  { min: 30, text: '⚠️ Смесени сигнали - внимавай', cls: 'verdict-yellow' },
-  { min: 0,  text: '❌ Ниска съвместимост', cls: 'verdict-red' },
+  { min: 70, key: 'v70', cls: 'verdict-green' },
+  { min: 50, key: 'v50', cls: 'verdict-yellow' },
+  { min: 30, key: 'v30', cls: 'verdict-yellow' },
+  { min: 0,  key: 'v0', cls: 'verdict-red' },
 ]
 
 function trendFor(profile) {
@@ -305,9 +354,10 @@ function trendFor(profile) {
   return d > 0 ? { dir: 'up', d } : { dir: 'down', d }
 }
 
-function verdictFor(compat, redPct) {
-  if (redPct >= RED_ALERT_PCT) return { text: '🚩 Прекалено много червени флагове - бягай', cls: 'verdict-red' }
-  return VERDICT_BANDS.find(b => compat >= b.min) || VERDICT_BANDS[VERDICT_BANDS.length - 1]
+function verdictFor(compat, redPct, t) {
+  if (redPct >= RED_ALERT_PCT) return { text: t('vRun'), cls: 'verdict-red' }
+  const b = VERDICT_BANDS.find(b => compat >= b.min) || VERDICT_BANDS[VERDICT_BANDS.length - 1]
+  return { text: t(b.key), cls: b.cls }
 }
 
 export default function App() {
@@ -335,24 +385,24 @@ function SignInScreen() {
   )
 }
 
-function Onboarding({ onChoose }) {
+function Onboarding({ onChoose, t }) {
   return (
     <div className="onboarding">
       <div className="onboarding-inner">
         <Flag size={40} className="logo-icon" />
-        <h1>Добре дошъл във Flag Check</h1>
-        <p>Кого ще оценяваш? Това нагласява езика и предложенията.</p>
+        <h1>{t('obTitle')}</h1>
+        <p>{t('obQ')}</p>
         <div className="onboarding-choices">
           <button className="onboarding-btn ob-female" onClick={() => onChoose('female')}>
             <span className="ob-emoji">♀</span>
-            <span className="ob-label">Оценявам жени</span>
+            <span className="ob-label">{t('obF')}</span>
           </button>
           <button className="onboarding-btn ob-male" onClick={() => onChoose('male')}>
             <span className="ob-emoji">♂</span>
-            <span className="ob-label">Оценявам мъже</span>
+            <span className="ob-label">{t('obM')}</span>
           </button>
         </div>
-        <p className="onboarding-note">Това нагласява само езика на предложенията.</p>
+        <p className="onboarding-note">{t('obNote')}</p>
       </div>
     </div>
   )
@@ -468,6 +518,9 @@ function FlagCheckApp() {
   const [profileDraft, setProfileDraft] = useState('')
   const [tourOpen, setTourOpen] = useState(false)
   const [theme, setTheme] = useState(loadTheme)
+  const [lang, setLang] = useState(loadLang)
+  const t = (k) => (I18N[lang] && I18N[lang][k]) || I18N.bg[k] || k
+  useEffect(() => { try { localStorage.setItem(LANG_KEY, lang) } catch {} }, [lang])
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     try { localStorage.setItem(THEME_KEY, theme) } catch {}
@@ -947,11 +1000,11 @@ Output exactly this structure in Bulgarian:
     }
   }
 
-  const verdict = verdictFor(stats.compat, stats.redPct)
+  const verdict = verdictFor(stats.compat, stats.redPct, t)
   const dbBanner = (stats.triggeredDealbreakers.length > 0 || stats.unmetMusthaves.length > 0) && !bannerDismissed
 
   if (!state.onboarded) {
-    return <Onboarding onChoose={(gender) => setState(s => ({ ...s, gender, onboarded: true }))} />
+    return <Onboarding t={t} onChoose={(gender) => setState(s => ({ ...s, gender, onboarded: true }))} />
   }
 
   return (
@@ -1061,13 +1114,13 @@ Output exactly this structure in Bulgarian:
 
       <div className="tabs">
         {[
-          ['flags', 'Флагове', Flag],
-          ['table', 'Таблица', TableIcon],
-          ['journal', 'Дневник', BookOpen],
-          ['compare', 'Сравнение', GitCompare],
-          ['insights', 'AI', Brain],
-        ].map(([t, label, Icon]) => (
-          <button key={t} data-tour={t === 'table' ? 'tab-table' : t === 'compare' ? 'tab-compare' : undefined} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
+          ['flags', t('tabFlags'), Flag],
+          ['table', t('tabTable'), TableIcon],
+          ['journal', t('tabJournal'), BookOpen],
+          ['compare', t('tabCompare'), GitCompare],
+          ['insights', t('tabAI'), Brain],
+        ].map(([tb, label, Icon]) => (
+          <button key={tb} data-tour={tb === 'table' ? 'tab-table' : tb === 'compare' ? 'tab-compare' : undefined} className={`tab ${tab === tb ? 'active' : ''}`} onClick={() => setTab(tb)}>
             <Icon size={14} className="tab-icon" />
             <span className="tab-label">{label}</span>
           </button>
@@ -1077,16 +1130,16 @@ Output exactly this structure in Bulgarian:
       {tab === 'flags' && (
         <Fragment>
           <Board
-            profile={active}
+            profile={active} t={t}
             onRate={setRating} onRemove={removeItem} onUpdate={updateItem} onMove={moveItem}
             onSuggest={(which) => setModal({ type: 'suggest', which })}
             newGreen={newGreen} setNewGreen={setNewGreen} addGreen={() => addItem('green', newGreen, setNewGreen)}
             newRed={newRed} setNewRed={setNewRed} addRed={() => addItem('red', newRed, setNewRed)}
           />
           <section className="results" data-tour="results">
-            <Ring value={stats.greenPct} color="var(--green)" label="Зелено" sub={`${stats.greenChecked}/${stats.greenTotal}`} />
-            <Ring value={stats.redPct} color="var(--red)" label="Червено" sub={`${stats.redChecked}/${stats.redTotal}`} />
-            <Ring value={stats.compat} color="var(--accent)" label="Съвместимост" sub="претеглено" big />
+            <Ring value={stats.greenPct} color="var(--green)" label={t('green')} sub={`${stats.greenChecked}/${stats.greenTotal}`} />
+            <Ring value={stats.redPct} color="var(--red)" label={t('red')} sub={`${stats.redChecked}/${stats.redTotal}`} />
+            <Ring value={stats.compat} color="var(--accent)" label={t('compat')} sub={t('weighted')} big />
           </section>
           <div className="score-breakdown card">
             <div className="score-breakdown-row">
@@ -1129,7 +1182,7 @@ Output exactly this structure in Bulgarian:
                 </div>
               ))}
             </div>
-            <div className="score-breakdown-note">Броят се само оценени флагове (rating&gt;0). Малко данни → резултатът се притегля към 50%. Пречка ×0.85 (мин. ×0.60 общо), непокрито задължително ×0.95 (мин. ×0.85). 100% съвместимост не съществува - скалата е разтегната спрямо реалистичен таван 85%. Лентите показват зеления дял по категория.</div>
+            <div className="score-breakdown-note">Формула по Gottman (5:1): лог-съотношение на зелени към червени точки - 5:1 ≈ 86%, 1:1 = 50%. „Никой не е перфектен“: +8% виртуални червени, така че таванът е ~94%. Малко данни → притегляне към 50%. Пречка ×0.85 (мин. ×0.60), непокрито задължително ×0.95 (мин. ×0.85).</div>
           </div>
           <div className={`verdict ${verdict.cls}`}>{verdict.text}</div>
           <details className="verdict-legend card">
@@ -1139,7 +1192,7 @@ Output exactly this structure in Bulgarian:
               {VERDICT_BANDS.map(b => (
                 <li key={b.min}>
                   <span className={`legend-dot ${b.cls === 'verdict-green' ? 'legend-green' : b.cls === 'verdict-red' ? 'legend-red' : 'legend-yellow'}`} />
-                  Съвместимост ≥ {b.min}% → {b.text}
+                  Съвместимост ≥ {b.min}% → {t(b.key)}
                 </li>
               ))}
             </ul>
@@ -1310,7 +1363,7 @@ Output exactly this structure in Bulgarian:
                 <SuggestBox
                   accent={modal.which} which={modal.which}
                   suggestions={suggestionsFor(modal.which)}
-                  addFlag={addFlag} hasFlag={hasFlag}
+                  addFlag={addFlag} hasFlag={hasFlag} t={t}
                 />
               </Fragment>
             )}
@@ -1330,20 +1383,29 @@ Output exactly this structure in Bulgarian:
             )}
             {modal.type === 'theme' && (
               <Fragment>
-                <h3>Тема</h3>
-                <div className="modal-help">Избери визуален стил. Запазва се на това устройство.</div>
-                <div className="theme-grid">
-                  {THEMES.map(t => (
+                <h3>{t('themeLang')}</h3>
+                <div className="modal-label">{t('language')}</div>
+                <div className="lang-row">
+                  {LANGS.map(l => (
                     <button
-                      key={t.id}
-                      className={`theme-option ${theme === t.id ? 'sel' : ''}`}
-                      onClick={() => setTheme(t.id)}
+                      key={l.id}
+                      className={`lang-option ${lang === l.id ? 'sel' : ''}`}
+                      onClick={() => setLang(l.id)}
+                    >{l.label}</button>
+                  ))}
+                </div>
+                <div className="theme-grid">
+                  {THEMES.map(th => (
+                    <button
+                      key={th.id}
+                      className={`theme-option ${theme === th.id ? 'sel' : ''}`}
+                      onClick={() => setTheme(th.id)}
                     >
-                      <span className="theme-swatch" style={{ background: t.swatch[0] }}>
-                        <span className="theme-swatch-dot" style={{ background: t.swatch[1] }} />
+                      <span className="theme-swatch" style={{ background: th.swatch[0] }}>
+                        <span className="theme-swatch-dot" style={{ background: th.swatch[1] }} />
                       </span>
-                      <span>{t.label}</span>
-                      {theme === t.id && <Check size={14} />}
+                      <span>{th.label}</span>
+                      {theme === th.id && <Check size={14} />}
                     </button>
                   ))}
                 </div>
@@ -1414,7 +1476,7 @@ Output exactly this structure in Bulgarian:
 
 // One DndContext spanning both colours so items can be dragged between
 // green/red columns and the must-have/dealbreaker banners.
-function Board({ profile, onRate, onRemove, onUpdate, onMove, onSuggest, newGreen, setNewGreen, addGreen, newRed, setNewRed, addRed }) {
+function Board({ profile, t, onRate, onRemove, onUpdate, onMove, onSuggest, newGreen, setNewGreen, addGreen, newRed, setNewRed, addRed }) {
   const [activeId, setActiveId] = useState(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -1469,17 +1531,17 @@ function Board({ profile, onRate, onRemove, onUpdate, onMove, onSuggest, newGree
       <main className="board">
         <BoardSide
           accent="green" which="green" bannerZone="musthaves"
-          columnTitle="Зелени флагове" bannerTitle="Задължителни" bannerIcon={Star}
+          columnTitle={t('greenCol')} bannerTitle={t('musthaves')} bannerIcon={Star}
           columnItems={profile.green} bannerItems={profile.musthaves || []}
-          activeId={activeId}
+          activeId={activeId} t={t}
           onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} onSuggest={onSuggest}
           newValue={newGreen} setNewValue={setNewGreen} onAdd={addGreen}
         />
         <BoardSide
           accent="red" which="red" bannerZone="dealbreakers"
-          columnTitle="Червени флагове" bannerTitle="Dealbreakers (пречки)" bannerIcon={Ban}
+          columnTitle={t('redCol')} bannerTitle={t('dealbreakers')} bannerIcon={Ban}
           columnItems={profile.red} bannerItems={profile.dealbreakers || []}
-          activeId={activeId}
+          activeId={activeId} t={t}
           onRate={onRate} onRemove={onRemove} onUpdate={onUpdate} onSuggest={onSuggest}
           newValue={newRed} setNewValue={setNewRed} onAdd={addRed}
         />
@@ -1496,7 +1558,7 @@ function Board({ profile, onRate, onRemove, onUpdate, onMove, onSuggest, newGree
   )
 }
 
-function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, bannerIcon: BannerIcon, columnItems, bannerItems, activeId, onRate, onRemove, onUpdate, onSuggest, newValue, setNewValue, onAdd }) {
+function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, bannerIcon: BannerIcon, columnItems, bannerItems, activeId, t, onRate, onRemove, onUpdate, onSuggest, newValue, setNewValue, onAdd }) {
   return (
     <section className={`side side-${accent}`} data-tour={accent === 'green' ? 'green-col' : 'red-col'}>
       <BannerZone
@@ -1520,7 +1582,7 @@ function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, banner
         ))}
         <div className="add-row" data-tour={accent === 'green' ? 'green-add' : 'red-add'}>
           <input
-            type="text" placeholder="Добави нов флаг…" value={newValue}
+            type="text" placeholder={t('addPlaceholder')} value={newValue}
             onChange={e => setNewValue(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') onAdd() }}
           />
@@ -1532,7 +1594,7 @@ function BoardSide({ accent, which, bannerZone, columnTitle, bannerTitle, banner
   )
 }
 
-function SuggestBox({ accent, which, suggestions, addFlag, hasFlag }) {
+function SuggestBox({ accent, which, suggestions, addFlag, hasFlag, t }) {
   const [showAdded, setShowAdded] = useState(false)
   const items = suggestions.map(s => ({ ...s, added: hasFlag(which, s.text) }))
   const newOnes = items.filter(s => !s.added)
@@ -1541,15 +1603,15 @@ function SuggestBox({ accent, which, suggestions, addFlag, hasFlag }) {
   return (
     <div className={`suggest-box suggest-box-${accent}`}>
       <div className="suggest-box-head">
-        <span className="suggest-box-title">{accent === 'red' ? 'Червени предложения' : 'Зелени предложения'}</span>
+        <span className="suggest-box-title">{accent === 'red' ? t('sgRed') : t('sgGreen')}</span>
         <button className="suggest-box-toggle" onClick={() => setShowAdded(v => !v)}>
           {showAdded ? <EyeOff size={12} /> : <Eye size={12} />}
-          {showAdded ? 'Скрий добавените' : 'Покажи добавените'}
+          {showAdded ? t('hideAdded') : t('showAdded')}
         </button>
       </div>
       <div className="suggest-tags">
         {shown.length === 0 ? (
-          <span className="suggest-empty">Няма нови предложения.</span>
+          <span className="suggest-empty">{t('noNew')}</span>
         ) : (
           shown.map(s => (
             <button

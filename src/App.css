@@ -1502,3 +1502,53 @@
 .ppl-item { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
 .ppl-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .ppl-dash { width: 18px; border-top: 2px dashed var(--text); flex-shrink: 0; }
+
+/* v5.2 — language picker + youthful micro-animations */
+.modal-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 8px; }
+.lang-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.lang-option {
+  flex: 1; min-width: 90px; padding: 10px; border-radius: 10px;
+  background: var(--panel-2); border: 1px solid var(--border);
+  font-size: 14px; font-weight: 600; color: var(--text);
+  transition: border-color .16s, box-shadow .16s, transform .12s;
+}
+.lang-option:active { transform: scale(0.97); }
+.lang-option.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); color: var(--accent); }
+
+/* Entrance animations */
+@keyframes fc-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes fc-pop { 0% { transform: scale(0.8); opacity: 0; } 60% { transform: scale(1.06); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes fc-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.card, .col, .results, .verdict, .gate-block, .board-banner, .table-banner, .compare-summary {
+  animation: fc-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.modal { animation: fc-pop 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.modal-bg { animation: fc-fade 0.18s ease both; }
+.row-wrap { animation: fc-rise 0.22s ease both; }
+.suggest-tag { animation: fc-pop 0.2s ease both; }
+
+/* Interactive springiness */
+.profile-pill:active, .tab:active, .suggest-tag:active:not(.added),
+.modal-btn:active, .data-btn:active, .theme-option:active, .mood-pill:active { transform: scale(0.96); }
+.rating-seg.on { animation: fc-pop 0.28s cubic-bezier(0.34,1.56,0.64,1) both; }
+.cell-seg.on { animation: fc-pop 0.2s ease both; }
+
+/* Verdict shimmer for a strong match */
+.verdict-green {
+  background-image: linear-gradient(90deg, var(--green-soft), transparent 55%),
+    linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.10) 50%, transparent 70%);
+  background-size: auto, 220% 100%;
+  animation: fc-rise 0.34s ease both, fc-shimmer 3.2s ease-in-out 0.4s infinite;
+}
+@keyframes fc-shimmer { 0%, 100% { background-position: 0 0, 140% 0; } 50% { background-position: 0 0, -40% 0; } }
+
+/* Compatibility ring count-up pulse on the big number */
+.ring svg text { transition: fill 0.3s ease; }
+.results .ring:last-child { animation: fc-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .card, .col, .results, .verdict, .gate-block, .board-banner, .table-banner,
+  .compare-summary, .modal, .modal-bg, .row-wrap, .suggest-tag, .rating-seg.on,
+  .cell-seg.on, .verdict-green, .results .ring:last-child { animation: none !important; }
+}
