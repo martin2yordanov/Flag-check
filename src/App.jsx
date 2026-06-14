@@ -301,24 +301,26 @@ function computeStats(profile) {
   // even an all-green profile tops out around ~94% (100% doesn't exist).
   const K = 1.15
   const Geff = gScore
-  const Reff = rScore + 0.08 * gScore + 1
+  const Reff = rScore + 0.05 * gScore + 0.5
   const core = Geff > 0 ? Math.pow(Geff, K) / (Math.pow(Geff, K) + Math.pow(Reff, K)) : 0.5
   const blended = 0.85 * core + 0.15 * countShare
   const PRIOR_STRENGTH = 3 // "virtual" neutral flags; mild pull to 50% on thin data
   const shrunk = (n * blended + PRIOR_STRENGTH * 0.5) / (n + PRIOR_STRENGTH)
-  const compatRaw = Math.max(0, Math.min(100, Math.round(shrunk * 100)))
+  // Optimism / benefit-of-the-doubt: a gentle concave lift so the mid-range
+  // reads more favourably (people tend to under-rate). Lifts 0.50→0.55,
+  // 0.40→0.45; leaves the extremes (0 and 1) untouched.
+  const optimistic = Math.pow(shrunk, 0.86)
+  const compatRaw = Math.max(0, Math.min(100, Math.round(optimistic * 100)))
 
   // Gates affect the number softly: penalties are mild, diminishing and bounded.
-  // Dealbreakers: ×0.85 each, never below ×0.60 total. Unmet must-haves: ×0.95
-  // each, never below ×0.85 total.
   const triggeredDealbreakers = (profile.dealbreakers || []).filter(i => i.rating > 0).map(i => i.text)
   const unmetMusthaves = (profile.musthaves || []).filter(i => i.rating === 0).map(i => i.text)
-  // Only TRIGGERED dealbreakers reduce the score, gently and bounded: ×0.90 each,
-  // never below ×0.70 total. Unmet must-haves are NOT penalised (rating 0 just
+  // Only TRIGGERED dealbreakers reduce the score, gently and bounded: ×0.93 each,
+  // never below ×0.78 total. Unmet must-haves are NOT penalised (rating 0 just
   // means "not evaluated yet") — they stay an informational warning only.
-  const dbFactor = Math.max(0.70, Math.pow(0.90, triggeredDealbreakers.length))
+  const dbFactor = Math.max(0.78, Math.pow(0.93, triggeredDealbreakers.length))
   const gateFactor = dbFactor
-  const compat = Math.max(0, Math.min(100, Math.round(shrunk * gateFactor * 100)))
+  const compat = Math.max(0, Math.min(100, Math.round(optimistic * gateFactor * 100)))
   const confidence = Math.round((n / (n + PRIOR_STRENGTH)) * 100)
   const gCount = nG, rCount = nR
   const intensityShare = core
